@@ -19,18 +19,19 @@ class FilterConfig(pydantic.BaseModel):
 
     exclude_topads: bool = True
     exclude_patterns: list[re.Pattern[str]] = pydantic.Field(default_factory=list)
+    require_all_patterns: list[re.Pattern[str]] = pydantic.Field(default_factory=list)
 
-    @pydantic.field_serializer("exclude_patterns")
-    def serialize_exclude_patterns(
-        self, exclude_patterns: list[re.Pattern[str]], _info: pydantic.FieldSerializationInfo
+    @pydantic.field_serializer("exclude_patterns", "require_all_patterns")
+    def serialize_patterns(
+        self, patterns: list[re.Pattern[str]], _info: pydantic.FieldSerializationInfo
     ) -> list[str]:
-        """Serialize the compiled exclude patterns to a list of strings
+        """Serialize compiled patterns to a list of strings
 
-        :param exclude_patterns: List of compiled patterns
+        :param patterns: List of compiled patterns
         :param _info: Serialization info object
         :return: List of patterns as strings
         """
-        return [p.pattern for p in exclude_patterns]
+        return [p.pattern for p in patterns]
 
 
 class NtfyShConfig(pydantic.BaseModel):

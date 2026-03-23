@@ -1,0 +1,86 @@
+{
+  "filter": {
+    "exclude_topads": true,
+    "exclude_patterns": [
+      "(?i)\\b(nur\\s+gpu|nur\\s+grafikkarte|ohne\\s+pc|laptop|notebook|defekt|bastler|tausch)\\b"
+    ],
+    "require_all_patterns": [
+      "(?i)(48\\s*gb|64\\s*gb|96\\s*gb|128\\s*gb|48gb|64gb|96gb|128gb)",
+      "(?i)(nvme|nvm\\.?e|m\\.?2|ssd\\s*(1|2)\\s*tb|1\\s*tb\\s*ssd|2\\s*tb\\s*ssd)"
+    ]
+  },
+  "notifications": {
+    "telegram": {
+      "bot_token": "<DEIN_BOT_TOKEN>",
+      "chat_id": "<DEINE_CHAT_ID>",
+      "link_preview": true
+    }
+  },
+  "searches": [
+    {
+      "name": "PC RTX 3060 12GB",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3060/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 3080 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3080+ti/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 3090",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3090/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 4060 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4060+ti/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 4070",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 4070 Super",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+super/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX 4070 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+ti/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX A4000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a4000/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC RTX A5000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a5000/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "PC Quadro P6000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/quadro+p6000/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "Workstation DaVinci",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/workstation+64gb/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "Videoschnitt PC",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/videoschnitt/k0c228",
+      "recursive": true
+    },
+    {
+      "name": "DaVinci Resolve PC",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/davinci+resolve/k0c228",
+      "recursive": true
+    }
+  ]
+}

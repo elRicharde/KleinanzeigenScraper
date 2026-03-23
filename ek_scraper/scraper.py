@@ -7,6 +7,8 @@ import logging
 import typing as ty
 from urllib.parse import urljoin
 
+import re
+
 import bs4
 from playwright.async_api import Browser, async_playwright
 
@@ -200,6 +202,11 @@ async def mark_ad_items_as_non_pruneable(search_config: SearchConfig, data_store
         data_store.mark_as_non_pruneable(ad_item)
 
 
+def _text_matches(text: str, pattern: re.Pattern[str]) -> bool:
+    """Check if text matches a pattern"""
+    return bool(pattern.search(text))
+
+
 def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig) -> bool:
     """Return whether an AdItem should be excluded from the results, based on the filter configuration
 
@@ -210,22 +217,26 @@ def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig) -> bool:
     if filter_config.exclude_topads and ad_item.is_top_ad:
         return True
 
+    searchable_text = f"{ad_item.title} {ad_item.description}"
+
     for pattern in filter_config.exclude_patterns:
-        if pattern.search(ad_item.title):
+        if _text_matches(searchable_text, pattern):
             _logger.info(
-                "Title of ad '%s' '%s' matches exclude pattern '%s'",
+                "Ad '%s' '%s' matches exclude pattern '%s'",
                 ad_item.id,
                 ad_item.title,
                 pattern.pattern,
             )
             return True
 
-        if pattern.search(ad_item.description):
+    for pattern in filter_config.require_all_patterns:
+        if not _text_matches(searchable_text, pattern):
             _logger.info(
-                "Description of ad '%s' '%s' matches exclude pattern '%s'",
+                "Ad '%s' '%s' does not match required pattern '%s'",
                 ad_item.id,
-                ad_item.description,
+                ad_item.title,
                 pattern.pattern,
             )
             return True
+
     return False

@@ -148,12 +148,19 @@ Ein Array von Suchen, die überwacht werden sollen.
 
 ### Filter (`filter`)
 
-Client-seitige Filter zum Ausschließen bestimmter Anzeigen.
+Client-seitige Filter zum Ausschließen und Einschließen bestimmter Anzeigen.
 
-| Feld               | Typ      | Standard | Beschreibung                                            |
-| ------------------ | -------- | -------- | ------------------------------------------------------- |
-| `exclude_topads`   | boolean  | `true`   | Gesponserte Top-Anzeigen ausschließen                   |
-| `exclude_patterns` | string[] | `[]`     | Regex-Muster — Anzeigen mit passendem Titel oder Beschreibung werden ignoriert |
+| Feld                   | Typ      | Standard | Beschreibung                                            |
+| ---------------------- | -------- | -------- | ------------------------------------------------------- |
+| `exclude_topads`       | boolean  | `true`   | Gesponserte Top-Anzeigen ausschließen                   |
+| `exclude_patterns`     | string[] | `[]`     | Regex-Muster — Anzeigen mit passendem Titel oder Beschreibung werden ignoriert |
+| `require_all_patterns` | string[] | `[]`     | Regex-Muster — **alle** müssen im Titel oder der Beschreibung matchen (AND-Verknüpfung). Innerhalb eines Musters kann Regex-OR (`|`) verwendet werden |
+
+**Logik:**
+- `exclude_patterns`: Anzeige wird ausgeschlossen wenn **irgendein** Muster matcht (OR)
+- `require_all_patterns`: Anzeige wird ausgeschlossen wenn **nicht alle** Muster matchen (AND)
+
+So lassen sich komplexe Abfragen bauen: `(Bedingung1_a ODER Bedingung1_b) UND (Bedingung2_a ODER Bedingung2_b)`
 
 **Beispiel:**
 
@@ -161,9 +168,11 @@ Client-seitige Filter zum Ausschließen bestimmter Anzeigen.
 "filter": {
   "exclude_topads": true,
   "exclude_patterns": [
-    ".*[Mm]akler.*",
-    ".*[Pp]rovision.*",
-    ".*[Tt]ausch.*"
+    "(?i)\\b(defekt|bastler|tausch)\\b"
+  ],
+  "require_all_patterns": [
+    "(?i)(64\\s*gb|96\\s*gb|128\\s*gb)",
+    "(?i)(nvme|m\\.?2|ssd)"
   ]
 }
 ```
