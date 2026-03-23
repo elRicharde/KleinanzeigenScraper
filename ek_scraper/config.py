@@ -50,11 +50,18 @@ class PushoverConfig(pydantic.BaseModel):
         return data
 
 
+class TelegramConfig(pydantic.BaseModel):
+    bot_token: str
+    chat_id: str
+    link_preview: bool = False
+
+
 class NotificationsConfig(pydantic.BaseModel):
     """Configuration for notifications"""
 
     pushover: PushoverConfig | None = None
     ntfy_sh: NtfyShConfig | None = pydantic.Field(default=None, alias="ntfy.sh")
+    telegram: TelegramConfig | None = None
 
 
 class Config(pydantic.BaseModel):

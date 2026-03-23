@@ -7,8 +7,8 @@ import logging
 import typing as ty
 from urllib.parse import urljoin
 
-import aiohttp
 import bs4
+from playwright.async_api import Browser, async_playwright
 
 from .config import FilterConfig, SearchConfig
 from .data_store import AdItem, DataStore
@@ -18,12 +18,8 @@ _logger = logging.getLogger(__name__.split(".", 1)[0])
 
 T = ty.TypeVar("T")
 
-# Use the user agent of a current Google Chrome browser
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
+# Default timeout for page navigation in milliseconds
+PAGE_TIMEOUT_MS = 30_000
 
 
 async def achain(*iterables: ty.AsyncIterable[T]) -> ty.AsyncIterator[T]:
@@ -56,16 +52,25 @@ class Result:
         return f"🤖 Found {len(self.ad_items)} new ad{plural}"
 
 
-async def get_soup(session: aiohttp.ClientSession, url: str) -> bs4.BeautifulSoup:
-    """Get the website and parse its markup using BeautifulSoup"""
+async def get_soup(browser: Browser, url: str) -> bs4.BeautifulSoup:
+    """Open a page in the headless browser and parse its markup using BeautifulSoup"""
     _logger.info("Getting soup for '%s'", url)
 
-    async with session.get(url, headers={"User-Agent": USER_AGENT}) as response:
-        content = await response.text()
-        if not response.content_type.startswith("text/html"):
-            # We received an unexpected response
+    page = await browser.new_page()
+    try:
+        response = await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        if response is None:
+            raise UnexpectedHTMLResponse("No response received")
+
+        content_type = response.headers.get("content-type", "")
+        if not content_type.startswith("text/html"):
+            content = await page.content()
             raise UnexpectedHTMLResponse(content)
+
+        content = await page.content()
         return bs4.BeautifulSoup(content, features="lxml")
+    finally:
+        await page.close()
 
 
 def get_all_pagination_urls(soup: bs4.BeautifulSoup, url: str) -> list[str]:
@@ -83,15 +88,15 @@ def get_all_pagination_urls(soup: bs4.BeautifulSoup, url: str) -> list[str]:
 
 
 async def resolve_all_pages(
-    session: aiohttp.ClientSession, url: str, soup_map: collections.abc.MutableMapping[str, bs4.BeautifulSoup]
+    browser: Browser, url: str, soup_map: collections.abc.MutableMapping[str, bs4.BeautifulSoup]
 ) -> None:
     """
     Resolve all pagination links of the search query and parse their HTML.
 
-    First all pagination URLs are parser from the initial page. Afterwards they all get resolved and parsed again.
+    First all pagination URLs are parsed from the initial page. Afterwards they all get resolved and parsed again.
     Any new links are then recursively passed to this function again.
 
-    :param session: aiohttp ClientSession to use
+    :param browser: Playwright Browser instance to use
     :param url: URL to use as the starting page
     :param soup_map: Map, mapping URLs to parsed HTML results. Used to store all already parsed pages.
     """
@@ -103,11 +108,11 @@ async def resolve_all_pages(
         plural = "" if len(missing_pages) == 1 else "s"
         _logger.info("Found %d new page%s on '%s'", len(missing_pages), plural, url)
 
-        async def add_to_soup_map(session: aiohttp.ClientSession, url: str) -> None:
-            soup_map[url] = await get_soup(session, url)
+        async def add_to_soup_map(browser: Browser, url: str) -> None:
+            soup_map[url] = await get_soup(browser, url)
 
-        await asyncio.gather(*[add_to_soup_map(session, url_) for url_ in missing_pages])
-        await resolve_all_pages(session, pagination_urls[-1], soup_map)
+        await asyncio.gather(*[add_to_soup_map(browser, url_) for url_ in missing_pages])
+        await resolve_all_pages(browser, pagination_urls[-1], soup_map)
 
 
 async def get_ad_items_from_soup(soup: bs4.BeautifulSoup, url: str) -> ty.AsyncGenerator[AdItem, None]:
@@ -142,13 +147,17 @@ async def get_all_ad_items(url: str, recursive: bool) -> collections.abc.AsyncGe
     :param recursive: Whether to search linked pagination pages as well
     :yield: AdItems
     """
-    async with aiohttp.ClientSession() as session:
-        soup_map = {url: (await get_soup(session, url))}
-        if recursive:
-            await resolve_all_pages(session, url, soup_map)
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            soup_map = {url: (await get_soup(browser, url))}
+            if recursive:
+                await resolve_all_pages(browser, url, soup_map)
 
-        async for ad_item in achain(*[get_ad_items_from_soup(soup, url) for url, soup in soup_map.items()]):
-            yield ad_item
+            async for ad_item in achain(*[get_ad_items_from_soup(soup, url) for url, soup in soup_map.items()]):
+                yield ad_item
+        finally:
+            await browser.close()
 
 
 async def get_filtered_search_result(

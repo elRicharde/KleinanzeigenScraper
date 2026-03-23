@@ -1,43 +1,261 @@
 # ek-scraper
 
-Simple scraper for kleinanzeigen.de searches with notifications for new ads.
+Automatischer Scraper für [kleinanzeigen.de](https://www.kleinanzeigen.de) mit Benachrichtigungen bei neuen Anzeigen.
+
+`ek-scraper` überwacht beliebig viele Kleinanzeigen-Suchen und benachrichtigt dich per **Telegram**, **Pushover** oder **ntfy.sh**, sobald neue Inserate erscheinen. Dank Headless-Browser (Playwright/Chromium) werden auch JavaScript-geschützte Seiten zuverlässig geladen.
+
+## Features
+
+- Headless-Browser-Scraping via Playwright (Chromium) — umgeht Bot-Detection und JavaScript-Schutz
+- Mehrere Suchen parallel überwachen
+- Automatische Pagination — alle Ergebnisseiten werden durchsucht
+- Flexible Filter: Top-Ads ausblenden, Regex-Muster zum Ausschließen
+- Benachrichtigungen via **Telegram**, **Pushover** und/oder **ntfy.sh**
+- Persistenter Datenspeicher — nur wirklich neue Anzeigen lösen Benachrichtigungen aus
+- Pruning — veraltete Anzeigen automatisch aus dem Datenspeicher entfernen
+- Ideal für Cronjobs / regelmäßige Ausführung
 
 ## Installation
 
-Install this package from PyPi in a separate virtual environment using [`uv`](https://docs.astral.sh/uv/).
+### Voraussetzungen
 
-``` sh
+- Python >= 3.11
+- [uv](https://docs.astral.sh/uv/) (empfohlen) oder pip
+
+### Installieren
+
+```sh
 uv tool install ek-scraper
 ```
 
-## Usage
+Oder mit pip:
 
-> For the full usage check the `ek-scraper --help` command
-
-Create a configuration file using
-
-``` sh
-ek-scraper create-config <path/to/config.json>
+```sh
+pip install ek-scraper
 ```
 
-The example configuration file will look like this:
+### Playwright-Browser einrichten
+
+Nach der Installation muss einmalig der Chromium-Browser für Playwright heruntergeladen werden:
+
+```sh
+playwright install chromium
+playwright install-deps chromium
+```
+
+> `install-deps` installiert die benötigten System-Bibliotheken (Linux). Unter macOS/Windows ist dieser Schritt in der Regel nicht nötig.
+
+## Schnellstart
+
+### 1. Konfiguration erstellen
+
+```sh
+ek-scraper create-config config.json
+```
+
+### 2. Konfiguration anpassen
+
+Bearbeite `config.json` — füge deine Suchen und Benachrichtigungseinstellungen hinzu (siehe [Konfiguration](#konfiguration)).
+
+### 3. Erster Lauf (Datenspeicher füllen, ohne Benachrichtigungen)
+
+```sh
+ek-scraper run --no-notifications --data-store datastore.json config.json
+```
+
+Beim ersten Lauf werden alle aktuellen Anzeigen erfasst und im Datenspeicher gespeichert. So bekommst du beim nächsten Lauf nur wirklich **neue** Anzeigen gemeldet.
+
+### 4. Regulärer Lauf (mit Benachrichtigungen)
+
+```sh
+ek-scraper run --data-store datastore.json config.json
+```
+
+## CLI-Befehle
+
+### `ek-scraper run`
+
+Führt den Scraper aus und sendet Benachrichtigungen für neue Anzeigen.
+
+```
+ek-scraper run [OPTIONEN] CONFIG_FILE
+```
+
+| Option                | Beschreibung                                                         |
+| --------------------- | -------------------------------------------------------------------- |
+| `--data-store PFAD`   | Pfad zur JSON-Datei für den Datenspeicher (Standard: `~/ek-scraper-datastore.json`) |
+| `--temp-data-store`   | Temporären Datenspeicher verwenden (nicht persistent)                |
+| `--no-notifications`  | Keine Benachrichtigungen senden                                      |
+| `--prune`             | Veraltete Anzeigen beim Schließen aus dem Datenspeicher entfernen    |
+| `-v, --verbose`       | Debug-Ausgabe aktivieren                                             |
+
+> `--data-store` und `--temp-data-store` schließen sich gegenseitig aus.
+
+### `ek-scraper create-config`
+
+Erstellt eine Beispiel-Konfigurationsdatei.
+
+```
+ek-scraper create-config CONFIG_FILE
+```
+
+### `ek-scraper prune`
+
+Entfernt Anzeigen aus dem Datenspeicher, die in keiner Suche mehr auftauchen.
+
+```
+ek-scraper prune --data-store PFAD CONFIG_FILE
+```
+
+## Konfiguration
+
+Die Konfiguration erfolgt über eine JSON-Datei mit drei Abschnitten:
+
+```json
+{
+  "filter": { ... },
+  "notifications": { ... },
+  "searches": [ ... ]
+}
+```
+
+### Suchen (`searches`)
+
+Ein Array von Suchen, die überwacht werden sollen.
+
+| Feld        | Typ     | Pflicht | Standard | Beschreibung                                      |
+| ----------- | ------- | ------- | -------- | ------------------------------------------------- |
+| `name`      | string  | ja      | —        | Beschreibender Name der Suche                     |
+| `url`       | string  | ja      | —        | URL der ersten Ergebnisseite auf kleinanzeigen.de |
+| `recursive` | boolean | nein    | `true`   | Alle Ergebnisseiten (Pagination) durchsuchen      |
+
+**Beispiel:**
+
+```json
+"searches": [
+  {
+    "name": "Wohnungen in Hamburg Altona",
+    "url": "https://www.kleinanzeigen.de/s-wohnung-mieten/altona/c203l9497",
+    "recursive": true
+  },
+  {
+    "name": "E-Bikes in Berlin",
+    "url": "https://www.kleinanzeigen.de/s-fahrraeder/berlin/e-bike/k0c217l3331",
+    "recursive": false
+  }
+]
+```
+
+### Filter (`filter`)
+
+Client-seitige Filter zum Ausschließen bestimmter Anzeigen.
+
+| Feld               | Typ      | Standard | Beschreibung                                            |
+| ------------------ | -------- | -------- | ------------------------------------------------------- |
+| `exclude_topads`   | boolean  | `true`   | Gesponserte Top-Anzeigen ausschließen                   |
+| `exclude_patterns` | string[] | `[]`     | Regex-Muster — Anzeigen mit passendem Titel oder Beschreibung werden ignoriert |
+
+**Beispiel:**
+
+```json
+"filter": {
+  "exclude_topads": true,
+  "exclude_patterns": [
+    ".*[Mm]akler.*",
+    ".*[Pp]rovision.*",
+    ".*[Tt]ausch.*"
+  ]
+}
+```
+
+### Benachrichtigungen (`notifications`)
+
+Alle Backends sind optional und können kombiniert werden. Pro Suche wird eine Benachrichtigung gesendet, wenn neue Anzeigen gefunden werden.
+
+#### Telegram
+
+Benachrichtigungen über einen Telegram-Bot.
+
+```json
+"notifications": {
+  "telegram": {
+    "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+    "chat_id": "-1001234567890",
+    "link_preview": false
+  }
+}
+```
+
+| Feld           | Typ     | Pflicht | Standard | Beschreibung                      |
+| -------------- | ------- | ------- | -------- | --------------------------------- |
+| `bot_token`    | string  | ja      | —        | Bot-Token vom BotFather           |
+| `chat_id`      | string  | ja      | —        | Chat-/Gruppen-/Kanal-ID          |
+| `link_preview` | boolean | nein    | `false`  | Link-Vorschau in Nachrichten anzeigen |
+
+**Telegram einrichten:**
+
+1. Öffne [@BotFather](https://t.me/BotFather) in Telegram
+2. Sende `/newbot` und folge den Anweisungen → du erhältst den `bot_token`
+3. Starte eine Konversation mit deinem Bot oder füge ihn einer Gruppe hinzu
+4. Rufe `https://api.telegram.org/bot<DEIN_TOKEN>/getUpdates` auf → lies die `chat_id` aus dem `chat.id` Feld ab
+
+#### Pushover
+
+Push-Benachrichtigungen über [Pushover](https://pushover.net/).
+
+```json
+"notifications": {
+  "pushover": {
+    "token": "<app-api-token>",
+    "user": "<user-api-token>",
+    "device": []
+  }
+}
+```
+
+| Feld     | Typ      | Pflicht | Standard       | Beschreibung                                |
+| -------- | -------- | ------- | -------------- | ------------------------------------------- |
+| `token`  | string   | ja      | —              | API-Token der Pushover-App                  |
+| `user`   | string   | ja      | —              | API-Token des Pushover-Nutzers              |
+| `device` | string[] | nein    | `[]` (alle)    | Gerätenamen, die benachrichtigt werden      |
+
+#### ntfy.sh
+
+Push-Benachrichtigungen über [ntfy.sh](https://ntfy.sh/).
+
+```json
+"notifications": {
+  "ntfy.sh": {
+    "topic": "ek-scraper-dein-geheimer-name",
+    "priority": 3
+  }
+}
+```
+
+| Feld       | Typ     | Pflicht | Standard | Beschreibung                                       |
+| ---------- | ------- | ------- | -------- | -------------------------------------------------- |
+| `topic`    | string  | ja      | —        | Topic-Name (sollte schwer zu erraten sein)          |
+| `priority` | integer | nein    | `3`      | Priorität: 1 (niedrig) bis 5 (dringend)            |
+
+> Topic-Namen sind öffentlich. Verwende einen schwer erratbaren Namen, z.B.:
+> ```sh
+> echo "ek-scraper-$(uuidgen)"
+> ```
+
+### Vollständiges Konfigurationsbeispiel
 
 ```json
 {
   "filter": {
     "exclude_topads": true,
-    "exclude_patterns": []
+    "exclude_patterns": [".*[Mm]akler.*", ".*[Pp]rovision.*"]
   },
   "notifications": {
-    "pushover": {
-        "token": "<your-app-api-token>",
-        "user": "<your-user-api-token>",
-        "device": []
-    },
-    "ntfy.sh": {
-      "topic": "<your-private-topic>",
-      "priority": 3
-    },
+    "telegram": {
+      "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+      "chat_id": "-1001234567890",
+      "link_preview": false
+    }
   },
   "searches": [
     {
@@ -49,157 +267,93 @@ The example configuration file will look like this:
 }
 ```
 
-See [Configuration](#configuration) for details on all configuration options.
+## Regelmäßige Ausführung (Cronjob)
 
-* Configure one or more searches in the `searches` section of the configuration,
-  see [Searches](#searches) for more details
-* Configure notifications in the `notifications` section of the configuration,
-  see [Notifications](#notifications) for details on notification configuration
-* (Optional) Configure filters in the `filter` section of the configuration,
-  see [Filter](#filter) for more details
-
-Run the following command to initialize the data store without sending any notifications:
-
-``` sh
-ek-scraper run --no-notifications path/to/config.json
-```
-
-Afterwards, run
+Um `ek-scraper` automatisch regelmäßig auszuführen, richte einen Cronjob ein:
 
 ```sh
-ek-scraper run path/to/config.json
-```
-
-to receive notifications according to your `notifications` configuration.
-
-## Development
-
-Follow the steps below to set up a development environment for this project.
-
-1. Clone this repository
-
-   ``` sh
-   git clone git@github.com:jonasehrlich/ek-scraper.git
-   ```
-
-2. Change directory into the repository
-
-   ``` sh
-   cd ek-scraper
-   ```
-
-3. Create a virtual environment using [poetry](https://python-poetry.org)
-
-   ``` sh
-   poetry install
-   ```
-
-4. (Optional) Install pre-commit environment
-
-   ``` sh
-   $ pre-commit
-   [INFO] Installing environment for https://github.com/pre-commit/pre-commit-hooks.
-   [INFO] Once installed this environment will be reused.
-   [INFO] This may take a few minutes...
-   [INFO] Installing environment for https://github.com/psf/black.
-   [INFO] Once installed this environment will be reused.
-   [INFO] This may take a few minutes...
-   Check Yaml...........................................(no files to check)Skipped
-   Fix End of Files.....................................(no files to check)Skipped
-   Trim Trailing Whitespace.............................(no files to check)Skipped
-   black................................................(no files to check)Skipped
-   ```
-
-## Configuration
-
-### Searches
-
-Searches can be configured in the `searches` array of the configuration file.
-Each of the searches can be configured with the following parameters.
-
-| Name        | Description                                                                        |
-| ----------- | ---------------------------------------------------------------------------------- |
-| `name`      | Name of the search, use a descriptive one (required)                               |
-| `url`       | URL of the first page of your search (required)                                    |
-| `recursive` | Whether to follow all pages of the search result <br/>(optional, defaults to true) |
-
-### Filter
-
-Filters can be configured in the `filter` section of the configuration file to exclude specific ads
-from your scrape results on the client side. The following settings can be configured.
-
-| Name | Description |
-| ---- | ----------- |
-| `exclude_topads` | Whether to exclude top ads from the results (optional, defaults to true) |
-| `exclude_patterns` | Case-insensitive regular expression patterns used to exclude ads (optional) |
-
-### Notifications
-
-Notifications can be configured in the `notifications` section of the configuration file.
-
-#### Push notifications using [Pushover](https://pushover.net/)
-
-![Screenshot of a push notification using Pushover](assets/pushover-notification.jpeg)
-
-`ek-scraper` supports push notifications to your devices using [Pushover](https://pushover.net/).
-For further information on the service check their terms and conditions.
-
-The implementation for _Pushover_ notifications will send a single notification per search, if new
-ads are discovered.
-
-To configure _Pushover_ for notifications from the scraper, first register at the service and create
-an application (e.g. `ek-scraper`). To use the service in `ek-scraper`, add the `pushover` object
-to the `notifications` object in your configuration file and fill the API tokens. Selection of the
-devices which will receive the notifications, is supported using the `device` array.
-
-| Name     | Description |
-| -------- | ------------------------------------------------------------------------------------------- |
-| `token`  | API token of the Pushover app (required) |
-| `user`   | API token of the Pushover user (required) |
-| `device` | List of device names to send the notifications to <br/> (optional, defaults to all devices) |
-
-#### Push notifications using [ntfy.sh](https://ntfy.sh/)
-
-![Screenshot of a push notification using ntfy.sh](assets/ntfy-sh-notification.jpeg)
-
-`ek-scraper` supports push notifications to your devices using [ntfy.sh](https://ntfy.sh/).
-For further information on the service check their terms and conditions.
-
-The implementation for _ntfy.sh_ notifications will send a single notification per search, if new
-ads are discovered.
-
-To configure _ntfy.sh_ for notifications from the scraper, define a topic and subscribe to it in the
-mobile app.
-
-> Note that topic names are public, so it's wise to choose something that cannot be guessed easily.
-> This can be done by including a UUID, e.g. by running the following command in your shell:
->
-> ``` sh
-> echo "ek-scraper-$(uuidgen)"
-> ```
-
-To use the service in `ek-scraper`, add the `ntfy.sh` object to the `notifications` object in your
-configuration file and add the topic you previously subscribed to.
-
-| Name       | Description                                                       |
-| ---------- | ----------------------------------------------------------------- |
-| `topic`    | Topic to publish the notifications to                             |
-| `priority` | Priority to send the notifications with (optional, defaults to 3) |
-
-## Running `ek-scraper` regularly
-
-> It should be avoided to run the tool too often to avoid getting your IP address blocked by
-> [kleinanzeigen.de](kleinanzeigen.de)
-
-In order to run `ek-scraper` regularly on a Unix-like system, configure it as a cronjob.
-
-To configure a cronjob, run
-
-``` sh
 crontab -e
 ```
 
-Edit the crontab table to run the command you want to run. A handy tool to check schedule
-configurations for cronjobs is [crontab.guru](https://crontab.guru/).
+Beispiel — alle 30 Minuten ausführen:
 
-For more information on configuring cronjobs use your favorite search engine.
+```
+*/30 * * * * ek-scraper run --data-store ~/ek-scraper-datastore.json ~/config.json
+```
+
+> Führe den Scraper nicht zu häufig aus, um eine IP-Sperre durch kleinanzeigen.de zu vermeiden. Ein Intervall von 15–30 Minuten ist empfehlenswert.
+
+Ein nützliches Tool zur Erstellung von Cron-Ausdrücken: [crontab.guru](https://crontab.guru/)
+
+## Funktionsweise
+
+```
+Konfigurationsdatei (JSON)
+        │
+        ▼
+┌─────────────────────┐
+│  Suchen (parallel)  │
+│                     │
+│  Playwright startet │
+│  Headless Chromium  │──▶ kleinanzeigen.de
+│                     │◀── HTML (mit JS gerendert)
+│  BeautifulSoup      │
+│  parst die Anzeigen │
+│                     │
+│  Pagination:        │
+│  Alle Seiten auto-  │
+│  matisch abarbeiten │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  Filter anwenden    │
+│  • Top-Ads          │
+│  • Regex-Muster     │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  Datenspeicher      │
+│  prüfen             │──▶ Bekannte Anzeigen überspringen
+└─────────┬───────────┘
+          │ nur neue Anzeigen
+          ▼
+┌─────────────────────┐
+│  Benachrichtigungen │
+│  • Telegram         │
+│  • Pushover         │
+│  • ntfy.sh          │
+└─────────────────────┘
+```
+
+## Datenspeicher
+
+Der Datenspeicher ist eine JSON-Datei, die alle bereits gesehenen Anzeigen enthält. So wird sichergestellt, dass nur neue Anzeigen Benachrichtigungen auslösen.
+
+- **Standardpfad:** `~/ek-scraper-datastore.json`
+- **Format:** JSON mit Anzeigen-IDs als Schlüssel
+- **Pruning:** Mit `--prune` oder dem `prune`-Befehl können Anzeigen entfernt werden, die nicht mehr in den Suchergebnissen erscheinen
+
+## Entwicklung
+
+### Repository klonen und einrichten
+
+```sh
+git clone git@github.com:jonasehrlich/ek-scraper.git
+cd ek-scraper
+uv sync
+playwright install chromium
+```
+
+### Linting und Typprüfung
+
+```sh
+uv run ruff check ek_scraper/
+uv run mypy ek_scraper/
+uv run isort --check ek_scraper/
+```
+
+## Lizenz
+
+MIT
