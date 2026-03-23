@@ -177,6 +177,18 @@ So lassen sich komplexe Abfragen bauen: `(Bedingung1_a ODER Bedingung1_b) UND (B
 }
 ```
 
+**Pattern-Referenz:**
+
+Die Patterns verwenden Python-Regex-Syntax. `(?i)` aktiviert Groß-/Kleinschreibung-ignorieren, `\\s*` matcht optionale Leerzeichen, `|` ist ODER innerhalb einer Gruppe.
+
+| Pattern | Matcht | Matcht nicht |
+|---------|--------|-------------|
+| `(?i)(48\\s*gb\|64\\s*gb\|96\\s*gb\|128\\s*gb)` | `64GB`, `64 GB`, `128gb`, `96 Gb` | `32GB`, `viel RAM`, `16gb` |
+| `(?i)(nvme\|m\\.?2\|ssd\\s*(1\|2)\\s*tb)` | `NVMe`, `M.2`, `M2`, `SSD 1TB`, `2 TB SSD` | `HDD`, `Festplatte`, `256GB SSD` |
+| `(?i)\\b(defekt\|bastler\|tausch)\\b` | `Defekt`, `BASTLER`, `Tausch` | `defekter` (da `\\b` Wortgrenzen prüft) |
+
+> **Hinweis:** Alle Patterns werden sowohl auf den **Titel** als auch auf die **Beschreibung** der Anzeige angewendet. Es reicht wenn der Suchbegriff in einem der beiden Felder vorkommt.
+
 ### Benachrichtigungen (`notifications`)
 
 Alle Backends sind optional und können kombiniert werden. Pro Suche wird eine Benachrichtigung gesendet, wenn neue Anzeigen gefunden werden.
