@@ -16,7 +16,13 @@ from ek_scraper.config import Config, NotificationsConfig, SearchConfig
 from ek_scraper.data_store import DataStore
 from ek_scraper.error import UnexpectedHTMLResponse
 from ek_scraper.notifications import ConfiguredSendNotifications, SendNotifications, ntfy_sh, pushover, telegram
-from ek_scraper.scraper import Result, get_filtered_search_result, mark_ad_items_as_non_pruneable
+from ek_scraper.scraper import (
+    MAX_CONCURRENT_PAGES,
+    Result,
+    create_browser,
+    get_filtered_search_result,
+    mark_ad_items_as_non_pruneable,
+)
 
 _logger = logging.getLogger(__name__.split(".", 1)[0])
 
@@ -210,16 +216,22 @@ async def run(
     :param prune_data_store: Whether to prune the data store on close
     """
     config = Config.model_validate_json(config_file.read_text())
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
 
-    with (
-        get_data_store_file(data_store_file) as _data_store_file,
-        DataStore(path=_data_store_file, prune_on_close=prune_data_store) as data_store,
-    ):
-        tasks: list[collections.abc.Awaitable[Result]] = list()
-        for search in config.searches:
-            tasks.append(get_filtered_search_result(search, config.filter, data_store=data_store))
+    async with create_browser() as browser:
+        with (
+            get_data_store_file(data_store_file) as _data_store_file,
+            DataStore(path=_data_store_file, prune_on_close=prune_data_store) as data_store,
+        ):
+            tasks: list[collections.abc.Awaitable[Result]] = list()
+            for search in config.searches:
+                tasks.append(
+                    get_filtered_search_result(
+                        browser, search, config.filter, data_store=data_store, semaphore=semaphore
+                    )
+                )
 
-        results: list[Result] = await asyncio.gather(*tasks)
+            results: list[Result] = await asyncio.gather(*tasks)
 
     for result in results:
         _logger.info(
@@ -257,15 +269,17 @@ async def prune(data_store_file: pathlib.Path | object, config_file: pathlib.Pat
     :param config_file: Path of the configuration file
     """
     config = Config.model_validate_json(config_file.read_text())
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
 
-    tasks: list[collections.abc.Awaitable[ty.Any]] = []
-    with (
-        get_data_store_file(data_store_file) as _data_store_file,
-        DataStore(path=_data_store_file, prune_on_close=True) as data_store,
-    ):
-        for search in config.searches:
-            tasks.append(mark_ad_items_as_non_pruneable(search, data_store))
-        await asyncio.gather(*tasks, return_exceptions=False)
+    async with create_browser() as browser:
+        tasks: list[collections.abc.Awaitable[ty.Any]] = []
+        with (
+            get_data_store_file(data_store_file) as _data_store_file,
+            DataStore(path=_data_store_file, prune_on_close=True) as data_store,
+        ):
+            for search in config.searches:
+                tasks.append(mark_ad_items_as_non_pruneable(browser, search, data_store, semaphore))
+            await asyncio.gather(*tasks, return_exceptions=False)
 
 
 async def async_main() -> ty.NoReturn:
