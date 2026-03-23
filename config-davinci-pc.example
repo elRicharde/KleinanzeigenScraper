@@ -18,68 +18,133 @@
   },
   "searches": [
     {
-      "name": "PC RTX 3060 12GB",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3060/k0c228",
+      "name": "Dresden RTX 3060",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+3060/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "PC RTX 3080 Ti",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3080+ti/k0c228",
+      "name": "Versand RTX 3060",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3060/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "PC RTX 3090",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3090/k0c228",
+      "name": "Dresden RTX 3080 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+3080+ti/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "PC RTX 4060 Ti",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4060+ti/k0c228",
+      "name": "Versand RTX 3080 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3080+ti/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "PC RTX 4070",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070/k0c228",
+      "name": "Dresden RTX 3090",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+3090/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "PC RTX 4070 Super",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+super/k0c228",
+      "name": "Versand RTX 3090",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+3090/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "PC RTX 4070 Ti",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+ti/k0c228",
+      "name": "Dresden RTX 4060 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+4060+ti/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "PC RTX A4000",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a4000/k0c228",
+      "name": "Versand RTX 4060 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4060+ti/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "PC RTX A5000",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a5000/k0c228",
+      "name": "Dresden RTX 4070",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+4070/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "PC Quadro P6000",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/quadro+p6000/k0c228",
+      "name": "Versand RTX 4070",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "Workstation DaVinci",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/workstation+64gb/k0c228",
+      "name": "Dresden RTX 4070 Super",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+4070+super/k0c228l3826r50",
       "recursive": true
     },
     {
-      "name": "Videoschnitt PC",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/videoschnitt/k0c228",
+      "name": "Versand RTX 4070 Super",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+super/k0c228+pcs.versand_s:ja",
       "recursive": true
     },
     {
-      "name": "DaVinci Resolve PC",
-      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/davinci+resolve/k0c228",
+      "name": "Dresden RTX 4070 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+4070+ti/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand RTX 4070 Ti",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+4070+ti/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden RTX A4000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+a4000/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand RTX A4000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a4000/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden RTX A5000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/rtx+a5000/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand RTX A5000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/rtx+a5000/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden Quadro P6000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/quadro+p6000/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand Quadro P6000",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/quadro+p6000/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden Workstation 64GB",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/workstation+64gb/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand Workstation 64GB",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/workstation+64gb/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden Videoschnitt",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/videoschnitt/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand Videoschnitt",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/videoschnitt/k0c228+pcs.versand_s:ja",
+      "recursive": true
+    },
+    {
+      "name": "Dresden DaVinci Resolve",
+      "url": "https://www.kleinanzeigen.de/s-pcs/dresden/preis::1500/davinci+resolve/k0c228l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Versand DaVinci Resolve",
+      "url": "https://www.kleinanzeigen.de/s-pcs/preis::1500/davinci+resolve/k0c228+pcs.versand_s:ja",
       "recursive": true
     }
   ]
