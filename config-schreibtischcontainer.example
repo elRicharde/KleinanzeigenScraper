@@ -1,0 +1,29 @@
+{
+  "filter": {
+    "exclude_topads": true,
+    "exclude_patterns": [],
+    "require_all_patterns": [
+      "(?i)(?<!\\d)(7[0-6])\\s*(cm|zentimeter|x|\\b)",
+      "(?i)(?<!\\d)(80)\\s*(cm|zentimeter|x|\\b)"
+    ]
+  },
+  "notifications": {
+    "telegram": {
+      "bot_token": "<DEIN_BOT_TOKEN>",
+      "chat_id": "<DEINE_CHAT_ID>",
+      "link_preview": true
+    }
+  },
+  "searches": [
+    {
+      "name": "Dresden Schreibtischcontainer",
+      "url": "https://www.kleinanzeigen.de/s-bueromoebel/dresden/preis::200/schreibtischcontainer/k0c93l3826r50",
+      "recursive": true
+    },
+    {
+      "name": "Dresden Rollcontainer",
+      "url": "https://www.kleinanzeigen.de/s-bueromoebel/dresden/preis::200/rollcontainer/k0c93l3826r50",
+      "recursive": true
+    }
+  ]
+}
