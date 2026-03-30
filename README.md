@@ -306,6 +306,99 @@ Beispiel — alle 30 Minuten ausführen:
 
 Ein nützliches Tool zur Erstellung von Cron-Ausdrücken: [crontab.guru](https://crontab.guru/)
 
+## Server-Einrichtung (Schritt für Schritt)
+
+Komplette Anleitung, um `ek-scraper` auf einem frischen Linux-Server einzurichten.
+
+### 1. Python und uv installieren
+
+```sh
+# Python 3.11+ prüfen
+python3 --version
+
+# uv installieren (falls noch nicht vorhanden)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. ek-scraper installieren
+
+```sh
+uv tool install ek-scraper
+```
+
+### 3. Playwright-Browser einrichten
+
+```sh
+playwright install chromium
+playwright install-deps chromium   # installiert System-Bibliotheken (nur Linux)
+```
+
+### 4. Konfiguration erstellen
+
+```sh
+# Beispielconfig erzeugen und anpassen
+ek-scraper create-config config.json
+```
+
+Oder eine vorhandene Config-Datei vom alten Server kopieren.
+
+Pflichtfelder in der Config:
+- Mindestens eine Suche mit `name` und `url`
+- Benachrichtigungs-Credentials (z.B. Telegram `bot_token` + `chat_id`)
+
+> **Tipp:** Mehrere Configs für verschiedene Suchkategorien anlegen (z.B. `config-pc.json`, `config-moebel.json`).
+
+### 5. Datenspeicher übernehmen (optional)
+
+Wenn du von einem anderen Server umziehst, kopiere die Datenspeicher-Datei mit:
+
+```sh
+scp alter-server:~/ek-scraper-datastore.json ~/
+```
+
+Ohne Datenspeicher werden beim ersten Lauf alle aktuellen Anzeigen als "neu" erfasst — du bekommst dann einmalig viele Benachrichtigungen.
+
+### 6. Erster Testlauf
+
+```sh
+# Ohne Benachrichtigungen — füllt nur den Datenspeicher
+ek-scraper run --no-notifications --data-store datastore.json config.json
+
+# Mit Benachrichtigungen — prüfen ob alles funktioniert
+ek-scraper run --data-store datastore.json config.json
+```
+
+### 7. Cronjob einrichten
+
+```sh
+crontab -e
+```
+
+Beispiel — alle 30 Minuten, eine Config:
+
+```
+*/30 * * * * ek-scraper run --data-store ~/datastore.json ~/config.json
+```
+
+Beispiel — mehrere Configs mit unterschiedlichen Intervallen:
+
+```
+*/15 * * * * ek-scraper run --data-store ~/datastore-pc.json ~/config-pc.json
+0 * * * *    ek-scraper run --data-store ~/datastore-moebel.json ~/config-moebel.json
+```
+
+### 8. Prüfen ob es läuft
+
+```sh
+# Cron-Logs anschauen
+grep ek-scraper /var/log/syslog
+
+# Oder Datenspeicher prüfen — wächst er?
+ls -la ~/datastore*.json
+```
+
+> **Zusammenfassung:** `uv` + `playwright` installieren → Config anlegen → optional Datenspeicher mitnehmen → Cronjob einrichten. Fertig.
+
 ## Funktionsweise
 
 ```
