@@ -26,7 +26,14 @@ async def send_notification(session: aiohttp.ClientSession, config: TelegramConf
     :param config: Configuration for Telegram
     :param result: Result of the scraper
     """
-    text = f"<b>{result.get_title()}</b>\n{result.get_message()}\n<a href=\"{result.get_url()}\">Zur Suche</a>"
+    ad_lines = "\n".join(
+        f'• <a href="{ad.url}">{ad.title}</a> – {ad.price}' for ad in result.ad_items
+    )
+    parts = [f"<b>{result.get_title()}</b>", result.get_message()]
+    if ad_lines:
+        parts.append(ad_lines)
+    parts.append(f'<a href="{result.get_url()}">Zur Suche</a>')
+    text = "\n\n".join(parts)
 
     params = {
         "chat_id": config.chat_id,
