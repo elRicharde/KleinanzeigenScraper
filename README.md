@@ -195,7 +195,18 @@ Alle Backends sind optional und können kombiniert werden. Pro Suche wird eine B
 
 #### Telegram
 
-Benachrichtigungen über einen Telegram-Bot.
+Benachrichtigungen über einen Telegram-Bot. Jede Nachricht enthält die einzelnen Anzeigen als klickbare Links mit Preis sowie einen Link zur Suchergebnisseite:
+
+```
+Dresden Workstation 64GB
+
+🤖 Found 2 new ads
+
+• iMac Pro 2017 5K 27" | 14-Core | 64GB | 2TB SSD Workstation PC – 1.399 €
+• High-End Workstation PC - Ryzen 9 5950X|64GB Ram| X570|1TB NVMe – 1.150 € VB
+
+Zur Suche
+```
 
 ```json
 "notifications": {
@@ -296,11 +307,22 @@ Um `ek-scraper` automatisch regelmäßig auszuführen, richte einen Cronjob ein:
 crontab -e
 ```
 
-Beispiel — alle 30 Minuten ausführen:
+**Wichtig:** Verwende in Cronjobs immer den **vollen Pfad** zu `ek-scraper`, da Cron eine eingeschränkte `PATH`-Umgebung hat. Den Pfad findest du mit `which ek-scraper`.
+
+Beispiel — alle 30 Minuten ausführen, mit vollem Pfad und Logging:
 
 ```
-*/30 * * * * ek-scraper run --data-store ~/ek-scraper-datastore.json ~/config.json
+*/30 * * * * cd ~/ek-scraper && /home/user/.local/bin/ek-scraper run --data-store datastore.json config.json >> ~/ek-scraper.log 2>&1
 ```
+
+Beispiel — mehrere Configs mit unterschiedlichen Intervallen:
+
+```
+*/15 * * * * cd ~/ek-scraper && /home/user/.local/bin/ek-scraper run --data-store datastore-pc.json config-pc.json >> ~/ek-scraper-pc.log 2>&1
+*/30 * * * * cd ~/ek-scraper && /home/user/.local/bin/ek-scraper run --data-store datastore-moebel.json config-moebel.json >> ~/ek-scraper-moebel.log 2>&1
+```
+
+> **Hinweis:** `>> ~/ek-scraper.log 2>&1` leitet sowohl stdout als auch stderr in eine Logdatei um. Ohne dieses Redirect gehen Fehlermeldungen verloren und der Scraper scheitert still.
 
 > Führe den Scraper nicht zu häufig aus, um eine IP-Sperre durch kleinanzeigen.de zu vermeiden. Ein Intervall von 15–30 Minuten ist empfehlenswert.
 
@@ -371,33 +393,106 @@ ek-scraper run --data-store datastore.json config.json
 ### 7. Cronjob einrichten
 
 ```sh
+# Vollen Pfad ermitteln
+which ek-scraper
+# z.B. /home/techniker/.local/bin/ek-scraper
+
 crontab -e
 ```
 
-Beispiel — alle 30 Minuten, eine Config:
+Beispiel — alle 30 Minuten, mit vollem Pfad und Logging:
 
 ```
-*/30 * * * * ek-scraper run --data-store ~/datastore.json ~/config.json
+*/30 * * * * cd ~/ek-scraper && /home/techniker/.local/bin/ek-scraper run --data-store datastore.json config.json >> ~/ek-scraper.log 2>&1
 ```
 
 Beispiel — mehrere Configs mit unterschiedlichen Intervallen:
 
 ```
-*/15 * * * * ek-scraper run --data-store ~/datastore-pc.json ~/config-pc.json
-0 * * * *    ek-scraper run --data-store ~/datastore-moebel.json ~/config-moebel.json
+*/15 * * * * cd ~/ek-scraper && /home/techniker/.local/bin/ek-scraper run --data-store datastore-pc.json config-pc.json >> ~/ek-scraper-pc.log 2>&1
+*/30 * * * * cd ~/ek-scraper && /home/techniker/.local/bin/ek-scraper run --data-store datastore-moebel.json config-moebel.json >> ~/ek-scraper-moebel.log 2>&1
 ```
 
 ### 8. Prüfen ob es läuft
 
 ```sh
-# Cron-Logs anschauen
-grep ek-scraper /var/log/syslog
+# Cron-Ausführungen im Syslog prüfen
+sudo grep ek-scraper /var/log/syslog | tail -10
 
-# Oder Datenspeicher prüfen — wächst er?
-ls -la ~/datastore*.json
+# Datenspeicher prüfen — wann zuletzt geändert?
+ls -la ~/ek-scraper/datastore*.json
+
+# Logdatei prüfen (falls Logging eingerichtet)
+tail -50 ~/ek-scraper.log
 ```
 
-> **Zusammenfassung:** `uv` + `playwright` installieren → Config anlegen → optional Datenspeicher mitnehmen → Cronjob einrichten. Fertig.
+> **Zusammenfassung:** `uv` + `playwright` installieren → Config anlegen → optional Datenspeicher mitnehmen → Cronjob mit vollem Pfad + Logging einrichten. Fertig.
+
+## Troubleshooting
+
+### Läuft der Scraper überhaupt?
+
+**1. Cronjobs prüfen:**
+
+```sh
+# Sind die Cronjobs eingerichtet?
+crontab -l
+
+# Werden sie ausgeführt?
+sudo grep ek-scraper /var/log/syslog | tail -20
+```
+
+**2. Datenspeicher prüfen:**
+
+```sh
+# Wann wurde zuletzt geschrieben?
+ls -la ~/ek-scraper/datastore*.json
+```
+
+Wenn das Änderungsdatum weit zurückliegt, aber die Cronjobs laut Syslog laufen, scheitert der Scraper still (siehe nächster Punkt).
+
+**3. Manueller Testlauf mit Debug-Output:**
+
+```sh
+ek-scraper --verbose run --data-store datastore.json config.json
+```
+
+> **Hinweis:** `--verbose` muss **vor** dem Subcommand `run` stehen.
+
+### Häufige Probleme
+
+| Problem | Ursache | Lösung |
+|---------|---------|--------|
+| Cronjob läuft, aber Datenspeicher wird nicht aktualisiert | Cron findet `ek-scraper` nicht (eingeschränkter `PATH`) | Vollen Pfad verwenden: `/home/user/.local/bin/ek-scraper` (ermitteln mit `which ek-scraper`) |
+| Cronjob-Fehler nicht sichtbar | stdout/stderr werden nicht erfasst | `>> ~/ek-scraper.log 2>&1` an die Crontab-Zeile anhängen |
+| Scraper findet keine Anzeigen | Chromium/Playwright veraltet oder kaputt | `playwright install chromium` erneut ausführen |
+| Scraper findet Anzeigen, aber keine Benachrichtigungen | Filter zu streng — alle Anzeigen werden rausgefiltert | Im `--verbose`-Output nach `does not match required pattern` suchen und Filter in der Config lockern |
+| IP-Sperre durch kleinanzeigen.de | Zu häufige Abfragen | Intervall auf mindestens 15–30 Minuten erhöhen |
+| Telegram-Benachrichtigung kommt nicht an | Bot-Token oder Chat-ID falsch | Token und Chat-ID in der Config prüfen, Bot muss der Gruppe hinzugefügt sein |
+
+### Filter debuggen
+
+Im `--verbose`-Modus zeigt der Scraper für jede gefilterte Anzeige den Grund an:
+
+```
+scraper: Ad '3373532998' 'Ryzen 5950x rtx 3080 ti Gaming pc'
+  does not match required pattern '(?i)(48\s*gb|64\s*gb|...)'
+```
+
+Das bedeutet: Die Anzeige wurde gefunden, aber der `require_all_patterns`-Filter hat sie ausgeschlossen. Wenn zu wenige Ergebnisse durchkommen, die Filter-Patterns in der Config anpassen.
+
+### Datenspeicher aufräumen
+
+Wenn der Datenspeicher zu groß wird oder du Benachrichtigungen für bereits gesehene Anzeigen erneut erhalten möchtest:
+
+```sh
+# Veraltete Anzeigen entfernen (die nicht mehr in den Suchergebnissen sind)
+ek-scraper prune --data-store datastore.json config.json
+
+# Komplett neu starten (alle aktuellen Anzeigen werden als "neu" erkannt)
+echo '{}' > datastore.json
+ek-scraper run --no-notifications --data-store datastore.json config.json
+```
 
 ## Funktionsweise
 
