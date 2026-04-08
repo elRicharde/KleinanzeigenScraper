@@ -1,14 +1,26 @@
 services:
-  ek-scraper:
+  scraper-pc:
     build: .
-    container_name: ek-scraper
+    container_name: ek-scraper-pc
+    restart: unless-stopped
+    environment:
+      - CRON_SCHEDULE=*/15 * * * *
+      - RUN_ON_START=false
+    volumes:
+      - ./config-pc.json:/app/config.json:ro
+      - scraper-pc-data:/app/data
+
+  scraper-moebel:
+    build: .
+    container_name: ek-scraper-moebel
     restart: unless-stopped
     environment:
       - CRON_SCHEDULE=*/30 * * * *
       - RUN_ON_START=false
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ek-scraper-data:/app/data
+      - ./config-schreibtischcontainer.json:/app/config.json:ro
+      - scraper-moebel-data:/app/data
 
 volumes:
-  ek-scraper-data:
+  scraper-pc-data:
+  scraper-moebel-data:
