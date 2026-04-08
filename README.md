@@ -14,8 +14,44 @@ Automatischer Scraper für [kleinanzeigen.de](https://www.kleinanzeigen.de) mit 
 - Persistenter Datenspeicher — nur wirklich neue Anzeigen lösen Benachrichtigungen aus
 - Pruning — veraltete Anzeigen automatisch aus dem Datenspeicher entfernen
 - Ideal für Cronjobs / regelmäßige Ausführung
+- **Docker-Support** — ein Container, beliebig viele Configs, integrierter Cron
 
 ## Installation
+
+### Option A: Docker (empfohlen)
+
+Voraussetzung: [Docker](https://docs.docker.com/engine/install/) mit Docker Compose.
+
+```sh
+git clone https://github.com/elRicharde/KleinanzeigenScraper.git
+cd KleinanzeigenScraper
+
+# Configs-Ordner anlegen und Konfigurationen hinzufügen
+mkdir -p configs
+cp config-davinci-pc.example configs/config-pc.json
+# configs/config-pc.json anpassen (Suchen, Telegram-Token etc.)
+
+# Bauen & starten
+docker compose up -d
+
+# Logs ansehen
+docker compose logs -f
+```
+
+Der Container erkennt automatisch alle `*.json`-Dateien im `configs/`-Ordner und erstellt für jede einen Cron-Job mit eigenem Datenspeicher.
+
+**Neue Suche hinzufügen:** JSON-Datei in `configs/` legen → `docker compose restart`
+
+**Suche entfernen:** JSON-Datei aus `configs/` löschen → `docker compose restart`
+
+**Umgebungsvariablen** (in `docker-compose.yml`):
+
+| Variable | Standard | Beschreibung |
+|---|---|---|
+| `CRON_SCHEDULE` | `*/15 * * * *` | Cron-Zeitplan für alle Configs |
+| `RUN_ON_START` | `false` | Beim Container-Start sofort einmal scrapen |
+
+### Option B: Manuelle Installation
 
 ### Voraussetzungen
 
@@ -299,9 +335,36 @@ Push-Benachrichtigungen über [ntfy.sh](https://ntfy.sh/).
 }
 ```
 
-## Regelmäßige Ausführung (Cronjob)
+## Regelmäßige Ausführung
 
-Um `ek-scraper` automatisch regelmäßig auszuführen, richte einen Cronjob ein:
+### Docker (empfohlen)
+
+Bei der Docker-Installation ist der Cron bereits im Container integriert. Das Intervall wird über die `CRON_SCHEDULE`-Umgebungsvariable in der `docker-compose.yml` gesteuert:
+
+```yaml
+environment:
+  - CRON_SCHEDULE=*/15 * * * *
+```
+
+Nützliche Docker-Befehle:
+
+```sh
+# Status prüfen
+docker compose ps
+
+# Logs ansehen
+docker compose logs -f
+
+# Neustart (z.B. nach Config-Änderung)
+docker compose restart
+
+# Manuellen Scrape-Lauf auslösen
+docker exec ek-scraper ek-scraper run --data-store /app/data/datastore-config-pc.json /app/configs/config-pc.json
+```
+
+### Cronjob (manuelle Installation)
+
+Um `ek-scraper` ohne Docker automatisch regelmäßig auszuführen, richte einen Cronjob ein:
 
 ```sh
 crontab -e
@@ -330,9 +393,85 @@ Ein nützliches Tool zur Erstellung von Cron-Ausdrücken: [crontab.guru](https:/
 
 ## Server-Einrichtung (Schritt für Schritt)
 
-Komplette Anleitung, um `ek-scraper` auf einem frischen Linux-Server einzurichten.
+### Docker-Setup
 
-### 1. Python und uv installieren
+Komplette Anleitung für einen frischen Linux-Server mit Docker.
+
+#### 1. Docker installieren
+
+```sh
+# Docker installieren (Ubuntu/Debian)
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Neu einloggen damit die Gruppenänderung greift
+```
+
+#### 2. Repository klonen
+
+```sh
+git clone https://github.com/elRicharde/KleinanzeigenScraper.git
+cd KleinanzeigenScraper
+```
+
+#### 3. Konfigurationen anlegen
+
+```sh
+mkdir -p configs
+
+# Beispiel-Config kopieren und anpassen
+cp config-davinci-pc.example configs/config-pc.json
+# configs/config-pc.json bearbeiten: Suchen, Telegram-Token, Chat-ID etc.
+```
+
+Pflichtfelder in der Config:
+- Mindestens eine Suche mit `name` und `url`
+- Benachrichtigungs-Credentials (z.B. Telegram `bot_token` + `chat_id`)
+
+> **Tipp:** Mehrere Config-Dateien im `configs/`-Ordner anlegen — jede wird automatisch erkannt.
+
+#### 4. Datenspeicher übernehmen (optional)
+
+Wenn du von einem bestehenden Setup umziehst, kannst du die bisherigen Datenspeicher in das Docker-Volume kopieren:
+
+```sh
+# Container einmal starten damit das Volume erstellt wird
+docker compose up -d && docker compose down
+
+# Datenspeicher ins Volume kopieren
+docker run --rm -v kleinanzeigenscraper_ek-scraper-data:/data -v $(pwd):/src alpine \
+  cp /src/datastore-pc.json /data/datastore-config-pc.json
+```
+
+Ohne Datenspeicher werden beim ersten Lauf alle aktuellen Anzeigen als "neu" erfasst — du bekommst dann einmalig viele Benachrichtigungen.
+
+#### 5. Starten
+
+```sh
+docker compose up -d
+```
+
+#### 6. Prüfen ob es läuft
+
+```sh
+# Container-Status
+docker compose ps
+
+# Logs ansehen
+docker compose logs -f
+
+# Datenspeicher prüfen (im Volume)
+docker exec ek-scraper ls -la /app/data/
+```
+
+> **Zusammenfassung:** Docker installieren → Repo klonen → Configs in `configs/` anlegen → `docker compose up -d`. Fertig.
+
+---
+
+### Manuelle Einrichtung (ohne Docker)
+
+Komplette Anleitung, um `ek-scraper` ohne Docker auf einem frischen Linux-Server einzurichten.
+
+#### 1. Python und uv installieren
 
 ```sh
 # Python 3.11+ prüfen
@@ -342,20 +481,20 @@ python3 --version
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. ek-scraper installieren
+#### 2. ek-scraper installieren
 
 ```sh
 uv tool install ek-scraper
 ```
 
-### 3. Playwright-Browser einrichten
+#### 3. Playwright-Browser einrichten
 
 ```sh
 playwright install chromium
 playwright install-deps chromium   # installiert System-Bibliotheken (nur Linux)
 ```
 
-### 4. Konfiguration erstellen
+#### 4. Konfiguration erstellen
 
 ```sh
 # Beispielconfig erzeugen und anpassen
@@ -370,7 +509,7 @@ Pflichtfelder in der Config:
 
 > **Tipp:** Mehrere Configs für verschiedene Suchkategorien anlegen (z.B. `config-pc.json`, `config-moebel.json`).
 
-### 5. Datenspeicher übernehmen (optional)
+#### 5. Datenspeicher übernehmen (optional)
 
 Wenn du von einem anderen Server umziehst, kopiere die Datenspeicher-Datei mit:
 
@@ -380,7 +519,7 @@ scp alter-server:~/ek-scraper-datastore.json ~/
 
 Ohne Datenspeicher werden beim ersten Lauf alle aktuellen Anzeigen als "neu" erfasst — du bekommst dann einmalig viele Benachrichtigungen.
 
-### 6. Erster Testlauf
+#### 6. Erster Testlauf
 
 ```sh
 # Ohne Benachrichtigungen — füllt nur den Datenspeicher
@@ -390,7 +529,7 @@ ek-scraper run --no-notifications --data-store datastore.json config.json
 ek-scraper run --data-store datastore.json config.json
 ```
 
-### 7. Cronjob einrichten
+#### 7. Cronjob einrichten
 
 ```sh
 # Vollen Pfad ermitteln
@@ -413,7 +552,7 @@ Beispiel — mehrere Configs mit unterschiedlichen Intervallen:
 */30 * * * * cd ~/ek-scraper && /home/techniker/.local/bin/ek-scraper run --data-store datastore-moebel.json config-moebel.json >> ~/ek-scraper-moebel.log 2>&1
 ```
 
-### 8. Prüfen ob es läuft
+#### 8. Prüfen ob es läuft
 
 ```sh
 # Cron-Ausführungen im Syslog prüfen
@@ -430,7 +569,43 @@ tail -50 ~/ek-scraper.log
 
 ## Troubleshooting
 
-### Läuft der Scraper überhaupt?
+### Docker
+
+**Container-Status prüfen:**
+
+```sh
+docker compose ps
+docker compose logs -f
+```
+
+**Manueller Testlauf im Container:**
+
+```sh
+docker exec ek-scraper ek-scraper run --data-store /app/data/datastore-config-pc.json /app/configs/config-pc.json
+```
+
+**Container neu bauen** (nach Code-Updates):
+
+```sh
+git pull
+docker compose up -d --build
+```
+
+**Datenspeicher einsehen:**
+
+```sh
+docker exec ek-scraper ls -la /app/data/
+```
+
+| Problem | Ursache | Lösung |
+|---------|---------|--------|
+| Container startet, aber keine Scrapes | Keine Config-Dateien gefunden | Prüfen ob `configs/`-Ordner existiert und JSON-Dateien enthält |
+| `docker compose up` schlägt fehl | Image-Build-Fehler | `docker compose build --no-cache` versuchen |
+| Alte Anzeigen werden nochmal gemeldet | Neues Volume ohne bisherigen Datenspeicher | Datenspeicher ins Volume kopieren (siehe Server-Einrichtung) |
+
+### Manuelle Installation
+
+**Läuft der Scraper überhaupt?**
 
 **1. Cronjobs prüfen:**
 
