@@ -1,0 +1,14 @@
+services:
+  ek-scraper:
+    build: .
+    container_name: ek-scraper
+    restart: unless-stopped
+    environment:
+      - CRON_SCHEDULE=*/30 * * * *
+      - RUN_ON_START=false
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ek-scraper-data:/app/data
+
+volumes:
+  ek-scraper-data:
