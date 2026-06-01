@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ek-scraper"
-version = "0.2.4"
+version = "1.0.0"
 description = "Simple scraper for kleinanzeigen.de searches with notifications for new ads."
 authors = [{ name = "Jonas Ehrlich", email = "jonas.ehrlich@gmail.com" }]
 requires-python = ">=3.11"
@@ -15,7 +15,7 @@ keywords = [
     "scraper",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",

@@ -19,7 +19,7 @@ for config in "${CONFIG_DIR}"/*.json; do
     [ -f "$config" ] || continue
     CONFIG_COUNT=$((CONFIG_COUNT + 1))
     name=$(basename "$config" .json)
-    echo "${CRON_SCHEDULE} root cd /app && ${EK_SCRAPER_BIN} run --data-store ${DATA_DIR}/datastore-${name}.json ${config} >> ${LOG_FILE} 2>&1" >> /etc/cron.d/ek-scraper
+    echo "${CRON_SCHEDULE} root flock -n /tmp/ek-scraper-${name}.lock ${EK_SCRAPER_BIN} run --data-store ${DATA_DIR}/datastore-${name}.json ${config} >> ${LOG_FILE} 2>&1" >> /etc/cron.d/ek-scraper
     echo "  -> ${name} (datastore: datastore-${name}.json)"
 done
 

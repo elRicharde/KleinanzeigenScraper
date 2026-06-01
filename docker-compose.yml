@@ -2,6 +2,7 @@ services:
   ek-scraper:
     build: .
     container_name: ek-scraper
+    init: true
     restart: unless-stopped
     environment:
       - CRON_SCHEDULE=*/15 * * * *

@@ -282,8 +282,8 @@ async def prune(data_store_file: pathlib.Path | object, config_file: pathlib.Pat
             await asyncio.gather(*tasks, return_exceptions=False)
 
 
-async def async_main() -> ty.NoReturn:
-    """Async main function."""
+async def async_main() -> int:
+    """Async main function. Returns exit code."""
     parser = get_argument_parser()
     namespace = parser.parse_args()
     configure_logging(namespace.verbose)
@@ -298,22 +298,22 @@ async def async_main() -> ty.NoReturn:
         if inspect.isawaitable(ret):
             await ret
     except UnexpectedHTMLResponse as exc:
-        parser.exit(
-            status=1,
-            message=(
-                f"An unexpected response was received from kleinanzeigen.de. Maybe your IP address was blocked\n{exc}"
-            ),
+        _logger.error(
+            "An unexpected response was received from kleinanzeigen.de. Maybe your IP address was blocked\n%s", exc
         )
+        return 1
     except Exception as exc:
         if namespace.verbose:
             _logger.exception("Error!")
-        parser.exit(status=1, message=str(exc))
+        _logger.error("%s", exc)
+        return 1
 
-    parser.exit(status=0)
+    return 0
 
 
 def main() -> None:
-    asyncio.run(async_main())
+    exit_code = asyncio.run(async_main())
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
