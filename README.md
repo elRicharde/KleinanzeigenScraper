@@ -14,7 +14,7 @@ Automatischer Scraper für [kleinanzeigen.de](https://www.kleinanzeigen.de) mit 
 - Persistenter Datenspeicher — nur wirklich neue Anzeigen lösen Benachrichtigungen aus
 - Pruning — veraltete Anzeigen automatisch aus dem Datenspeicher entfernen
 - Ideal für Cronjobs / regelmäßige Ausführung
-- **Docker-Support** — ein Container, beliebig viele Configs, integrierter Cron
+- **Docker-Support** — ein Container, beliebig viele Configs, integrierter Cron, Prozess-Management mit init und Overlap-Schutz
 
 ## Installation
 
@@ -43,6 +43,8 @@ Der Container erkennt automatisch alle `*.json`-Dateien im `configs/`-Ordner und
 **Neue Suche hinzufügen:** JSON-Datei in `configs/` legen → `docker compose restart`
 
 **Suche entfernen:** JSON-Datei aus `configs/` löschen → `docker compose restart`
+
+**Stabilität:** Der Container nutzt `init: true` (tini als PID 1), damit Playwright/Chromium-Prozesse nach jedem Scrape-Lauf zuverlässig aufgeräumt werden. Zusätzlich verhindert `flock` pro Config, dass sich überlappende Cron-Läufe gegenseitig stören (z.B. wenn ein Lauf länger als das Cron-Intervall dauert).
 
 **Umgebungsvariablen** (in `docker-compose.yml`):
 
@@ -602,6 +604,8 @@ docker exec ek-scraper ls -la /app/data/
 | Container startet, aber keine Scrapes | Keine Config-Dateien gefunden | Prüfen ob `configs/`-Ordner existiert und JSON-Dateien enthält |
 | `docker compose up` schlägt fehl | Image-Build-Fehler | `docker compose build --no-cache` versuchen |
 | Alte Anzeigen werden nochmal gemeldet | Neues Volume ohne bisherigen Datenspeicher | Datenspeicher ins Volume kopieren (siehe Server-Einrichtung) |
+| `BlockingIOError: Resource temporarily unavailable` | Zombie-Prozesse akkumulieren (fehlende `init: true`) | `docker compose down && docker compose up -d --build` — ab v1.0.0 durch `init: true` behoben |
+| Hohe PID-Anzahl im Container (`docker stats`) | Überlappende Cron-Läufe oder Zombie-Prozesse | Container neustarten; ab v1.0.0 durch `flock` und `init: true` behoben |
 
 ### Manuelle Installation
 
