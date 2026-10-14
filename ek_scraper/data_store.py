@@ -87,7 +87,7 @@ class DataStore:
             if self._path.stat().st_size == 0:
                 # The file is empty, nothing to decode
                 return
-            self._data = _DataStoreData.model_validate_json(self._path.read_text())
+            self._data = _DataStoreData.model_validate_json(self._path.read_text(encoding="utf-8"))
         except pydantic.ValidationError:
             _logger.error("Possibly invalid data store schema, please delete your data store and start from scratch")
             raise
@@ -97,7 +97,7 @@ class DataStore:
     def close(self) -> None:
         if self._prune_on_close:
             self.prune()
-        self._path.write_text(self._data.model_dump_json(by_alias=True, exclude_none=True))
+        self._path.write_text(self._data.model_dump_json(by_alias=True, exclude_none=True), encoding="utf-8")
 
     def prune(self) -> None:
         """Drop all AdItems marked as pruneable from the data store"""

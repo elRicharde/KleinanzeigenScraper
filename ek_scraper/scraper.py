@@ -105,7 +105,7 @@ def get_all_pagination_urls(soup: bs4.BeautifulSoup, url: str) -> list[str]:
     :return: List of URLs
     :rtype: list[str]
     """
-    anchors = soup.select("a.pagination-page")
+    anchors = soup.select('a[aria-label^="Seite "]')
     return [urljoin(url, href) for link_element in anchors if isinstance(href := link_element.get("href"), str)]
 
 
@@ -141,27 +141,53 @@ async def resolve_all_pages(
         await resolve_all_pages(browser, pagination_urls[-1], soup_map, semaphore)
 
 
+def get_top_ad_ids(soup: bs4.BeautifulSoup) -> set[str]:
+    """Get the IDs of all top ads from the serialized search result props embedded in the page"""
+    top_ad_ids: set[str] = set()
+    for island in soup.find_all("astro-island"):
+        props = island.get("props")
+        if not isinstance(props, str) or "resultAds" not in props:
+            continue
+        for match in re.finditer(r'"id":\[0,(\d+)\][^{}]*?"topAd":\[0,true\]', props):
+            top_ad_ids.add(match.group(1))
+    return top_ad_ids
+
+
 async def get_ad_items_from_soup(soup: bs4.BeautifulSoup, url: str) -> ty.AsyncGenerator[AdItem, None]:
     """Get all ad items in a list of BeautifulSoup objects"""
     _logger.debug("Find all ad items in '%s'", url)
-    for bs_ad_item in soup.find_all("article", class_="aditem"):
+    top_ad_ids = get_top_ad_ids(soup)
+    bs_ad_items = soup.select("article[data-adid]")
+    num_parsed = 0
+    for bs_ad_item in bs_ad_items:
         try:
+            ad_id = bs_ad_item["data-adid"]
+            location_icon = bs_ad_item.select_one('svg[data-title="locationOutline"]')
+            image = bs_ad_item.select_one("[data-image-container] img")
             ad_item = AdItem(
-                id=bs_ad_item.get("data-adid"),
-                url=urljoin(url, bs_ad_item.get("data-href")),
-                title=bs_ad_item.select(".text-module-begin>a")[0].text.strip(),
-                description=bs_ad_item.select(".aditem-main--middle--description")[0].text.strip(),
-                location=bs_ad_item.select('i[class*="icon-pin"]')[0].parent.text.strip(),
-                price=bs_ad_item.select('p[class*="price"]')[0].text.strip(),
-                image_url=bs_ad_item.select(".imagebox")[0].get("data-imgsrc"),
-                is_top_ad=bool(bs_ad_item.select(".icon-feature-topad")),
+                id=ad_id,
+                url=urljoin(url, bs_ad_item["data-href"]),
+                title=bs_ad_item.select("h3")[0].text.strip(),
+                description=bs_ad_item.select("h3 + p")[0].text.strip(),
+                location=location_icon.parent.select("span")[0].text.strip(),
+                price=bs_ad_item.select("p.text-title3.font-strong")[0].text.strip(),
+                image_url=image.get("src") if image else None,
+                is_top_ad=ad_id in top_ad_ids,
                 pruneable=False,
             )
-        except (IndexError, AttributeError):
+        except (IndexError, AttributeError, KeyError):
             ad_id = bs_ad_item.get("data-adid", "unknown")
             _logger.debug("Skipping ad '%s' due to unexpected HTML structure", ad_id)
             continue
+        num_parsed += 1
         yield ad_item
+
+    if bs_ad_items and not num_parsed:
+        _logger.warning(
+            "Found %d ads on '%s' but could not parse any of them, the HTML structure probably changed",
+            len(bs_ad_items),
+            url,
+        )
 
 
 async def get_all_ad_items(

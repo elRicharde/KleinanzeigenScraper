@@ -215,7 +215,7 @@ async def run(
     :param send_notifications: Whether to send notifications after execution
     :param prune_data_store: Whether to prune the data store on close
     """
-    config = Config.model_validate_json(config_file.read_text())
+    config = Config.model_validate_json(config_file.read_text(encoding="utf-8"))
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
 
     async with create_browser() as browser:
@@ -258,7 +258,7 @@ def create_config(config_file: pathlib.Path, **kwargs: ty.Any) -> None:
 
     :param config_file: Path of the configuration file
     """
-    config_file.write_text(DEFAULT_CONFIG.model_dump_json(indent=2, by_alias=True, exclude_none=True))
+    config_file.write_text(DEFAULT_CONFIG.model_dump_json(indent=2, by_alias=True, exclude_none=True), encoding="utf-8")
     _logger.info("Created default config file at '%s'", config_file)
 
 
@@ -268,7 +268,7 @@ async def prune(data_store_file: pathlib.Path | object, config_file: pathlib.Pat
     :param data_store_file: File to open the data store in
     :param config_file: Path of the configuration file
     """
-    config = Config.model_validate_json(config_file.read_text())
+    config = Config.model_validate_json(config_file.read_text(encoding="utf-8"))
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
 
     async with create_browser() as browser:
