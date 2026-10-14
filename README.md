@@ -196,7 +196,7 @@ Client-seitige Filter zum Ausschließen und Einschließen bestimmter Anzeigen.
 | `exclude_patterns`     | string[] | `[]`     | Regex-Muster — Anzeigen mit passendem Titel oder Beschreibung werden ignoriert |
 | `require_all_patterns` | string[] | `[]`     | Regex-Muster — **alle** müssen im Titel oder der Beschreibung matchen (AND-Verknüpfung). Innerhalb eines Musters kann Regex-OR (`|`) verwendet werden |
 | `require_location_patterns` | string[] | `[]` | Regex-Muster für den Ort der Anzeige (z.B. `01099 Äußere Neustadt`). Mindestens eins muss matchen (OR) |
-| `fetch_full_description` | boolean | `false` | Für neue Anzeigen die Detailseite laden und die Muster auf die **volle** Beschreibung samt Details anwenden statt auf die gekürzte Vorschau |
+| `fetch_full_description` | boolean | `false` | Für neue Anzeigen die Detailseite laden und `require_all_patterns` auf die **volle** Beschreibung samt Details anwenden statt auf die gekürzte Vorschau |
 
 **Logik:**
 - `exclude_patterns`: Anzeige wird ausgeschlossen wenn **irgendein** Muster matcht (OR)
@@ -231,7 +231,7 @@ Die Patterns verwenden Python-Regex-Syntax. `(?i)` aktiviert Groß-/Kleinschreib
 
 > **Hinweis:** Alle Patterns werden sowohl auf den **Titel** als auch auf die **Beschreibung** der Anzeige angewendet. Es reicht wenn der Suchbegriff in einem der beiden Felder vorkommt.
 
-**Volle Beschreibung (`fetch_full_description`):** Die Ergebnisliste zeigt nur die ersten ca. 150 Zeichen der Beschreibung. Steht z.B. "64 GB RAM" weiter unten, würde die Anzeige sonst fälschlich aussortiert. Mit `fetch_full_description: true` wird für jede **neue** Anzeige die Detailseite geladen (nur wenn Ort- und TopAd-Filter sie nicht schon aussortiert haben). Pro Lauf werden höchstens 30 Detailseiten geladen (`MAX_DETAIL_PAGES_PER_RUN`), weitere Anzeigen werden auf den nächsten Lauf verschoben. Nach dem ersten Aktivieren kann es daher ein paar Läufe dauern, bis alles nachgeholt ist.
+**Volle Beschreibung (`fetch_full_description`):** Die Ergebnisliste zeigt nur die ersten ca. 150 Zeichen der Beschreibung. Steht z.B. "64 GB RAM" weiter unten, würde die Anzeige sonst fälschlich aussortiert. Mit `fetch_full_description: true` wird für jede **neue** Anzeige die Detailseite geladen, sofern Ort-, TopAd- und Ausschluss-Filter sie nicht schon aussortiert haben. Der Volltext gilt nur für `require_all_patterns`: `exclude_patterns` prüfen weiterhin nur Titel und Vorschau, weil volle Beschreibungen oft Floskeln wie "kein Tausch" oder "keine Defekte" enthalten. Auch die Detailseiten unterliegen der Drossel (1 Abruf alle 3 Sekunden). Nach dem ersten Aktivieren kann ein Lauf daher länger dauern als das Cron-Intervall, die folgenden Cron-Starts werden dann per `flock` übersprungen.
 
 **Orts-Filter (`require_location_patterns`):** Praktisch, wenn nur bestimmte Postleitzahlen interessieren. Beispiel für fünf PLZ im Dresdner Norden:
 

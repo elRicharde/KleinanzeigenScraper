@@ -27,9 +27,6 @@ PAGE_TIMEOUT_MS = 30_000
 # Max concurrent page fetches to avoid overloading
 MAX_CONCURRENT_PAGES = 4
 
-# Max ad detail pages per run, the remaining ads are postponed to the next run to avoid an IP block
-MAX_DETAIL_PAGES_PER_RUN = 30
-
 # Minimum time between the start of two page fetches in seconds (max. 20 pages per minute)
 MIN_REQUEST_INTERVAL_S = 3.0
 
@@ -53,10 +50,9 @@ async def create_browser() -> ty.AsyncIterator[Browser]:
 
 
 @dataclasses.dataclass
-class DetailPageBudget:
-    """Shared budget for ad detail page fetches of one run, fetches are done one after another"""
+class DetailPageState:
+    """Shared state for ad detail page fetches of one run, fetches are done one after another"""
 
-    remaining: int = MAX_DETAIL_PAGES_PER_RUN
     blocked: bool = False
     lock: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
 
@@ -250,22 +246,21 @@ async def get_all_ad_items(
         yield ad_item
 
 
-async def get_full_description(browser: Browser, ad_item: AdItem, budget: DetailPageBudget) -> str | None:
+async def get_full_description(browser: Browser, ad_item: AdItem, state: DetailPageState) -> str | None:
     """Get the full description and the detail attributes from the page of an ad
 
     :param browser: Shared Playwright Browser instance
     :param ad_item: AdItem to get the description for
-    :param budget: Budget for detail page fetches of this run
-    :return: Full description text including the detail attributes, None if the budget is exhausted
+    :param state: Shared state for detail page fetches of this run
+    :return: Full description text including the detail attributes, None if the IP address got blocked
     """
-    async with budget.lock:
-        if budget.blocked or budget.remaining <= 0:
+    async with state.lock:
+        if state.blocked:
             return None
-        budget.remaining -= 1
         try:
             soup = await get_soup(browser, ad_item.url)
         except IPBlocked:
-            budget.blocked = True
+            state.blocked = True
             raise
 
     parts = [element.get_text(" ", strip=True) for element in soup.select("#viewad-description-text, #viewad-details")]
@@ -281,7 +276,7 @@ async def get_filtered_search_result(
     filter_config: FilterConfig,
     data_store: DataStore,
     semaphore: asyncio.Semaphore,
-    detail_page_budget: DetailPageBudget,
+    detail_page_state: DetailPageState,
 ) -> Result:
     """
     Return a result for a search configuration
@@ -293,7 +288,7 @@ async def get_filtered_search_result(
     :param filter_config: Filter configuration for the AdItems
     :param data_store: Data store object to check if ad_item is new
     :param semaphore: Semaphore to limit concurrent page fetches
-    :param detail_page_budget: Budget for ad detail page fetches of this run
+    :param detail_page_state: Shared state for ad detail page fetches of this run
     :return: Result for this search configuration
     """
     result = Result(search_config)
@@ -303,21 +298,22 @@ async def get_filtered_search_result(
         if not data_store.add(ad_item):
             result.num_already_in_datastore += 1
             continue
-        # Second: check the filters which do not need the description
-        if ad_item_is_excluded_by_metadata(ad_item, filter_config):
+        # Second: check the filters which do not need the full description
+        if ad_item_is_excluded_by_metadata(ad_item, filter_config) or ad_item_matches_exclude_patterns(
+            ad_item, filter_config
+        ):
             result.num_excluded += 1
             continue
         candidates.append(ad_item)
 
-    has_text_patterns = bool(filter_config.exclude_patterns or filter_config.require_all_patterns)
-    fetch_full_description = filter_config.fetch_full_description and has_text_patterns
+    fetch_full_description = filter_config.fetch_full_description and bool(filter_config.require_all_patterns)
     num_postponed = 0
 
     for ad_item in candidates:
         full_description: str | None = None
         if fetch_full_description:
             try:
-                full_description = await get_full_description(browser, ad_item, detail_page_budget)
+                full_description = await get_full_description(browser, ad_item, detail_page_state)
             except UnexpectedHTMLResponse as exc:
                 _logger.warning("Could not get full description of ad '%s': %s", ad_item.id, exc)
             if full_description is None:
@@ -325,8 +321,8 @@ async def get_filtered_search_result(
                 data_store.remove(ad_item)
                 num_postponed += 1
                 continue
-        # Third: check the text filters, on the full description if available
-        if ad_item_is_excluded(ad_item, filter_config, full_description):
+        # Third: check the required patterns, on the full description if available
+        if ad_item_misses_required_patterns(ad_item, filter_config, full_description):
             result.num_excluded += 1
             continue
         # AdItem is good, add to results
@@ -377,19 +373,17 @@ def ad_item_is_excluded_by_metadata(ad_item: AdItem, filter_config: FilterConfig
     return False
 
 
-def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig, full_description: str | None = None) -> bool:
-    """Return whether an AdItem should be excluded from the results, based on the filter configuration
+def ad_item_matches_exclude_patterns(ad_item: AdItem, filter_config: FilterConfig) -> bool:
+    """Return whether an AdItem matches one of the exclude patterns
+
+    Only the title and the shortened description are checked: the full description often contains phrases like
+    "kein Tausch" or "keine Defekte", which would wrongly exclude the ad.
 
     :param ad_item: AdItem to check
     :param filter_config: Filter configuration
-    :param full_description: Full description of the ad, used instead of the shortened one if given
-    :return: Whether to exclude this item
+    :return: Whether the item matches an exclude pattern
     """
-    if ad_item_is_excluded_by_metadata(ad_item, filter_config):
-        return True
-
-    searchable_text = f"{ad_item.title} {full_description or ad_item.description}"
-
+    searchable_text = f"{ad_item.title} {ad_item.description}"
     for pattern in filter_config.exclude_patterns:
         if _text_matches(searchable_text, pattern):
             _logger.info(
@@ -399,7 +393,20 @@ def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig, full_descr
                 pattern.pattern,
             )
             return True
+    return False
 
+
+def ad_item_misses_required_patterns(
+    ad_item: AdItem, filter_config: FilterConfig, full_description: str | None = None
+) -> bool:
+    """Return whether an AdItem does not match all of the required patterns
+
+    :param ad_item: AdItem to check
+    :param filter_config: Filter configuration
+    :param full_description: Full description of the ad, used instead of the shortened one if given
+    :return: Whether the item misses a required pattern
+    """
+    searchable_text = f"{ad_item.title} {full_description or ad_item.description}"
     for pattern in filter_config.require_all_patterns:
         if not _text_matches(searchable_text, pattern):
             _logger.info(
@@ -409,5 +416,19 @@ def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig, full_descr
                 pattern.pattern,
             )
             return True
-
     return False
+
+
+def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig, full_description: str | None = None) -> bool:
+    """Return whether an AdItem should be excluded from the results, based on the filter configuration
+
+    :param ad_item: AdItem to check
+    :param filter_config: Filter configuration
+    :param full_description: Full description of the ad, used for the required patterns if given
+    :return: Whether to exclude this item
+    """
+    return (
+        ad_item_is_excluded_by_metadata(ad_item, filter_config)
+        or ad_item_matches_exclude_patterns(ad_item, filter_config)
+        or ad_item_misses_required_patterns(ad_item, filter_config, full_description)
+    )
