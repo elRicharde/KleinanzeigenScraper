@@ -47,6 +47,13 @@ class _DataStoreData(pydantic.BaseModel):
         self.ad_items[ad_item.id] = ad_item
         return True
 
+    def remove(self, ad_item: AdItem) -> None:
+        """Remove an AdItem from the data store, so it is treated as new again in the next run
+
+        :param ad_item: AdItem to remove
+        """
+        self.ad_items.pop(ad_item.id, None)
+
     def prune(self) -> None:
         """Drop all AdItems marked as pruneable from the data store"""
         pruneable_ids: list[str] = []
@@ -121,3 +128,10 @@ class DataStore:
         :param ad_item: AdItem to mark as non-pruneable
         """
         self._data.mark_as_non_pruneable(ad_item)
+
+    def remove(self, ad_item: AdItem) -> None:
+        """Remove an AdItem from the data store, so it is treated as new again in the next run
+
+        :param ad_item: AdItem to remove
+        """
+        self._data.remove(ad_item)

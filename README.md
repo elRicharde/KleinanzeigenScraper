@@ -38,13 +38,15 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Der Container erkennt automatisch alle `*.json`-Dateien im `configs/`-Ordner und erstellt für jede einen Cron-Job mit eigenem Datenspeicher.
+Der Container erkennt automatisch alle `*.json`-Dateien im `configs/`-Ordner. Jede Config bekommt einen eigenen Datenspeicher, alle Configs laufen in einem gemeinsamen Cron-Job **nacheinander**, damit die Drossel (siehe unten) für alle zusammen gilt.
 
 **Neue Suche hinzufügen:** JSON-Datei in `configs/` legen → `docker compose restart`
 
 **Suche entfernen:** JSON-Datei aus `configs/` löschen → `docker compose restart`
 
-**Stabilität:** Der Container nutzt `init: true` (tini als PID 1), damit Playwright/Chromium-Prozesse nach jedem Scrape-Lauf zuverlässig aufgeräumt werden. Zusätzlich verhindert `flock` pro Config, dass sich überlappende Cron-Läufe gegenseitig stören (z.B. wenn ein Lauf länger als das Cron-Intervall dauert).
+**Stabilität:** Der Container nutzt `init: true` (tini als PID 1), damit Playwright/Chromium-Prozesse nach jedem Scrape-Lauf zuverlässig aufgeräumt werden. Zusätzlich verhindert `flock`, dass sich überlappende Cron-Läufe gegenseitig stören: Läuft der vorherige Lauf noch, wird der nächste übersprungen.
+
+**Drossel:** Um eine IP-Sperre durch kleinanzeigen.de zu vermeiden, startet der Scraper höchstens einen Seitenabruf alle 3 Sekunden (max. 20 pro Minute, `MIN_REQUEST_INTERVAL_S` in `scraper.py`). Wird eine Sperre erkannt (HTTP 403), bricht der Lauf ab.
 
 **Umgebungsvariablen** (in `docker-compose.yml`):
 
@@ -193,6 +195,8 @@ Client-seitige Filter zum Ausschließen und Einschließen bestimmter Anzeigen.
 | `exclude_topads`       | boolean  | `true`   | Gesponserte Top-Anzeigen ausschließen                   |
 | `exclude_patterns`     | string[] | `[]`     | Regex-Muster — Anzeigen mit passendem Titel oder Beschreibung werden ignoriert |
 | `require_all_patterns` | string[] | `[]`     | Regex-Muster — **alle** müssen im Titel oder der Beschreibung matchen (AND-Verknüpfung). Innerhalb eines Musters kann Regex-OR (`|`) verwendet werden |
+| `require_location_patterns` | string[] | `[]` | Regex-Muster für den Ort der Anzeige (z.B. `01099 Äußere Neustadt`). Mindestens eins muss matchen (OR) |
+| `fetch_full_description` | boolean | `false` | Für neue Anzeigen die Detailseite laden und die Muster auf die **volle** Beschreibung samt Details anwenden statt auf die gekürzte Vorschau |
 
 **Logik:**
 - `exclude_patterns`: Anzeige wird ausgeschlossen wenn **irgendein** Muster matcht (OR)
@@ -226,6 +230,14 @@ Die Patterns verwenden Python-Regex-Syntax. `(?i)` aktiviert Groß-/Kleinschreib
 | `(?i)\\b(defekt\|bastler\|tausch)\\b` | `Defekt`, `BASTLER`, `Tausch` | `defekter` (da `\\b` Wortgrenzen prüft) |
 
 > **Hinweis:** Alle Patterns werden sowohl auf den **Titel** als auch auf die **Beschreibung** der Anzeige angewendet. Es reicht wenn der Suchbegriff in einem der beiden Felder vorkommt.
+
+**Volle Beschreibung (`fetch_full_description`):** Die Ergebnisliste zeigt nur die ersten ca. 150 Zeichen der Beschreibung. Steht z.B. "64 GB RAM" weiter unten, würde die Anzeige sonst fälschlich aussortiert. Mit `fetch_full_description: true` wird für jede **neue** Anzeige die Detailseite geladen (nur wenn Ort- und TopAd-Filter sie nicht schon aussortiert haben). Pro Lauf werden höchstens 30 Detailseiten geladen (`MAX_DETAIL_PAGES_PER_RUN`), weitere Anzeigen werden auf den nächsten Lauf verschoben. Nach dem ersten Aktivieren kann es daher ein paar Läufe dauern, bis alles nachgeholt ist.
+
+**Orts-Filter (`require_location_patterns`):** Praktisch, wenn nur bestimmte Postleitzahlen interessieren. Beispiel für fünf PLZ im Dresdner Norden:
+
+```json
+"require_location_patterns": ["^(01097|01099|01109|01127|01129)\\b"]
+```
 
 ### Benachrichtigungen (`notifications`)
 

@@ -18,6 +18,7 @@ from ek_scraper.error import UnexpectedHTMLResponse
 from ek_scraper.notifications import ConfiguredSendNotifications, SendNotifications, ntfy_sh, pushover, telegram
 from ek_scraper.scraper import (
     MAX_CONCURRENT_PAGES,
+    DetailPageBudget,
     Result,
     create_browser,
     get_filtered_search_result,
@@ -217,6 +218,7 @@ async def run(
     """
     config = Config.model_validate_json(config_file.read_text(encoding="utf-8"))
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
+    detail_page_budget = DetailPageBudget()
 
     async with create_browser() as browser:
         with (
@@ -227,7 +229,12 @@ async def run(
             for search in config.searches:
                 tasks.append(
                     get_filtered_search_result(
-                        browser, search, config.filter, data_store=data_store, semaphore=semaphore
+                        browser,
+                        search,
+                        config.filter,
+                        data_store=data_store,
+                        semaphore=semaphore,
+                        detail_page_budget=detail_page_budget,
                     )
                 )
 
@@ -270,6 +277,7 @@ async def prune(data_store_file: pathlib.Path | object, config_file: pathlib.Pat
     """
     config = Config.model_validate_json(config_file.read_text(encoding="utf-8"))
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
+    detail_page_budget = DetailPageBudget()
 
     async with create_browser() as browser:
         tasks: list[collections.abc.Awaitable[ty.Any]] = []

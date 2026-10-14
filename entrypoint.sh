@@ -7,23 +7,38 @@ CONFIG_DIR="/app/configs"
 DATA_DIR="/app/data"
 LOG_FILE="/var/log/ek-scraper.log"
 EK_SCRAPER_BIN=$(which ek-scraper)
+RUN_ALL_SCRIPT="/usr/local/bin/ek-scraper-run-all"
 
-# Build crontab with PATH so cron can find installed binaries
+# Script that runs all configs one after another, so the rate limit of the scraper
+# applies to all configs together instead of each config separately
+cat > "${RUN_ALL_SCRIPT}" <<EOF
+#!/bin/bash
+cd /app
+for config in "${CONFIG_DIR}"/*.json; do
+    [ -f "\$config" ] || continue
+    name=\$(basename "\$config" .json)
+    echo "\$(date '+%Y-%m-%d %H:%M:%S') Scraping: \${name}"
+    "${EK_SCRAPER_BIN}" run --data-store "${DATA_DIR}/datastore-\${name}.json" "\$config"
+done
+EOF
+chmod +x "${RUN_ALL_SCRIPT}"
+
 CONFIG_COUNT=0
-{
-    echo "PATH=$PATH"
-    echo ""
-} > /etc/cron.d/ek-scraper
-
 for config in "${CONFIG_DIR}"/*.json; do
     [ -f "$config" ] || continue
     CONFIG_COUNT=$((CONFIG_COUNT + 1))
     name=$(basename "$config" .json)
-    echo "${CRON_SCHEDULE} root flock -n /tmp/ek-scraper-${name}.lock ${EK_SCRAPER_BIN} run --data-store ${DATA_DIR}/datastore-${name}.json ${config} >> ${LOG_FILE} 2>&1" >> /etc/cron.d/ek-scraper
     echo "  -> ${name} (datastore: datastore-${name}.json)"
 done
 
-echo "" >> /etc/cron.d/ek-scraper
+# Build crontab with PATH so cron can find installed binaries.
+# One job for all configs, flock skips a run while the previous one is still active.
+{
+    echo "PATH=$PATH"
+    echo ""
+    echo "${CRON_SCHEDULE} root flock -n /tmp/ek-scraper.lock ${RUN_ALL_SCRIPT} >> ${LOG_FILE} 2>&1"
+    echo ""
+} > /etc/cron.d/ek-scraper
 chmod 0644 /etc/cron.d/ek-scraper
 
 echo "ek-scraper Docker container started"
@@ -39,12 +54,7 @@ fi
 # Optional: run once on start
 if [ "${RUN_ON_START}" = "true" ]; then
     echo "Running initial scrape..."
-    for config in "${CONFIG_DIR}"/*.json; do
-        [ -f "$config" ] || continue
-        name=$(basename "$config" .json)
-        echo "  Scraping: ${name}"
-        cd /app && "${EK_SCRAPER_BIN}" run --data-store "${DATA_DIR}/datastore-${name}.json" "$config" 2>&1 | tee -a "${LOG_FILE}"
-    done
+    flock -n /tmp/ek-scraper.lock "${RUN_ALL_SCRIPT}" 2>&1 | tee -a "${LOG_FILE}"
     echo "Initial scrape complete."
 fi
 

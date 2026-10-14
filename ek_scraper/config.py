@@ -20,8 +20,10 @@ class FilterConfig(pydantic.BaseModel):
     exclude_topads: bool = True
     exclude_patterns: list[re.Pattern[str]] = pydantic.Field(default_factory=list)
     require_all_patterns: list[re.Pattern[str]] = pydantic.Field(default_factory=list)
+    require_location_patterns: list[re.Pattern[str]] = pydantic.Field(default_factory=list)
+    fetch_full_description: bool = False
 
-    @pydantic.field_serializer("exclude_patterns", "require_all_patterns")
+    @pydantic.field_serializer("exclude_patterns", "require_all_patterns", "require_location_patterns")
     def serialize_patterns(
         self, patterns: list[re.Pattern[str]], _info: pydantic.FieldSerializationInfo
     ) -> list[str]:

@@ -6,6 +6,7 @@ import contextlib
 import dataclasses
 import logging
 import re
+import time
 import typing as ty
 from urllib.parse import urljoin
 
@@ -14,7 +15,7 @@ from playwright.async_api import Browser, async_playwright
 
 from .config import FilterConfig, SearchConfig
 from .data_store import AdItem, DataStore
-from .error import UnexpectedHTMLResponse
+from .error import IPBlocked, UnexpectedHTMLResponse
 
 _logger = logging.getLogger(__name__.split(".", 1)[0])
 
@@ -25,6 +26,12 @@ PAGE_TIMEOUT_MS = 30_000
 
 # Max concurrent page fetches to avoid overloading
 MAX_CONCURRENT_PAGES = 4
+
+# Max ad detail pages per run, the remaining ads are postponed to the next run to avoid an IP block
+MAX_DETAIL_PAGES_PER_RUN = 30
+
+# Minimum time between the start of two page fetches in seconds (max. 20 pages per minute)
+MIN_REQUEST_INTERVAL_S = 3.0
 
 
 async def achain(*iterables: ty.AsyncIterable[T]) -> ty.AsyncIterator[T]:
@@ -43,6 +50,15 @@ async def create_browser() -> ty.AsyncIterator[Browser]:
             yield browser
         finally:
             await browser.close()
+
+
+@dataclasses.dataclass
+class DetailPageBudget:
+    """Shared budget for ad detail page fetches of one run, fetches are done one after another"""
+
+    remaining: int = MAX_DETAIL_PAGES_PER_RUN
+    blocked: bool = False
+    lock: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
 
 
 @dataclasses.dataclass
@@ -68,16 +84,41 @@ class Result:
         return f"🤖 Found {len(self.ad_items)} new ad{plural}"
 
 
+class RateLimiter:
+    """Ensure a minimum interval between the start of two page fetches"""
+
+    def __init__(self, min_interval_s: float) -> None:
+        self.min_interval_s = min_interval_s
+        self._lock = asyncio.Lock()
+        self._last_start = -float("inf")
+
+    async def wait(self) -> None:
+        async with self._lock:
+            delay = self._last_start + self.min_interval_s - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self._last_start = time.monotonic()
+
+
+_rate_limiter = RateLimiter(MIN_REQUEST_INTERVAL_S)
+
+
 async def get_soup(browser: Browser, url: str, semaphore: asyncio.Semaphore | None = None) -> bs4.BeautifulSoup:
     """Open a page in the headless browser and parse its markup using BeautifulSoup"""
-    _logger.info("Getting soup for '%s'", url)
 
     async def _fetch() -> bs4.BeautifulSoup:
+        await _rate_limiter.wait()
+        _logger.info("Getting soup for '%s'", url)
         page = await browser.new_page()
         try:
             response = await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
             if response is None:
                 raise UnexpectedHTMLResponse("No response received")
+
+            if response.status == 403:
+                raise IPBlocked(f"HTTP 403 for '{url}', the IP address is probably blocked temporarily")
+            if response.status >= 400:
+                raise UnexpectedHTMLResponse(f"HTTP {response.status} for '{url}'")
 
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("text/html"):
@@ -209,12 +250,38 @@ async def get_all_ad_items(
         yield ad_item
 
 
+async def get_full_description(browser: Browser, ad_item: AdItem, budget: DetailPageBudget) -> str | None:
+    """Get the full description and the detail attributes from the page of an ad
+
+    :param browser: Shared Playwright Browser instance
+    :param ad_item: AdItem to get the description for
+    :param budget: Budget for detail page fetches of this run
+    :return: Full description text including the detail attributes, None if the budget is exhausted
+    """
+    async with budget.lock:
+        if budget.blocked or budget.remaining <= 0:
+            return None
+        budget.remaining -= 1
+        try:
+            soup = await get_soup(browser, ad_item.url)
+        except IPBlocked:
+            budget.blocked = True
+            raise
+
+    parts = [element.get_text(" ", strip=True) for element in soup.select("#viewad-description-text, #viewad-details")]
+    if not parts:
+        _logger.warning("No description found on '%s', using the shortened description", ad_item.url)
+        return ad_item.description
+    return " ".join(parts)
+
+
 async def get_filtered_search_result(
     browser: Browser,
     search_config: SearchConfig,
     filter_config: FilterConfig,
     data_store: DataStore,
     semaphore: asyncio.Semaphore,
+    detail_page_budget: DetailPageBudget,
 ) -> Result:
     """
     Return a result for a search configuration
@@ -226,20 +293,47 @@ async def get_filtered_search_result(
     :param filter_config: Filter configuration for the AdItems
     :param data_store: Data store object to check if ad_item is new
     :param semaphore: Semaphore to limit concurrent page fetches
+    :param detail_page_budget: Budget for ad detail page fetches of this run
     :return: Result for this search configuration
     """
     result = Result(search_config)
+    candidates: list[AdItem] = []
     async for ad_item in get_all_ad_items(browser, search_config.url, search_config.recursive, semaphore):
         # First: try to add the AdItem to the datastore, if it is already available continue
         if not data_store.add(ad_item):
             result.num_already_in_datastore += 1
             continue
-        # Second: check if the AdItem should be excluded
-        if ad_item_is_excluded(ad_item, filter_config):
+        # Second: check the filters which do not need the description
+        if ad_item_is_excluded_by_metadata(ad_item, filter_config):
+            result.num_excluded += 1
+            continue
+        candidates.append(ad_item)
+
+    has_text_patterns = bool(filter_config.exclude_patterns or filter_config.require_all_patterns)
+    fetch_full_description = filter_config.fetch_full_description and has_text_patterns
+    num_postponed = 0
+
+    for ad_item in candidates:
+        full_description: str | None = None
+        if fetch_full_description:
+            try:
+                full_description = await get_full_description(browser, ad_item, detail_page_budget)
+            except UnexpectedHTMLResponse as exc:
+                _logger.warning("Could not get full description of ad '%s': %s", ad_item.id, exc)
+            if full_description is None:
+                # Retry in the next run instead of judging the ad by its shortened description
+                data_store.remove(ad_item)
+                num_postponed += 1
+                continue
+        # Third: check the text filters, on the full description if available
+        if ad_item_is_excluded(ad_item, filter_config, full_description):
             result.num_excluded += 1
             continue
         # AdItem is good, add to results
         result.ad_items.append(ad_item)
+
+    if num_postponed:
+        _logger.info("Postponed %d ads of query '%s' to the next run", num_postponed, search_config.name)
 
     return result
 
@@ -264,8 +358,8 @@ def _text_matches(text: str, pattern: re.Pattern[str]) -> bool:
     return bool(pattern.search(text))
 
 
-def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig) -> bool:
-    """Return whether an AdItem should be excluded from the results, based on the filter configuration
+def ad_item_is_excluded_by_metadata(ad_item: AdItem, filter_config: FilterConfig) -> bool:
+    """Return whether an AdItem should be excluded based on its metadata (top ad, location)
 
     :param ad_item: AdItem to check
     :param filter_config: Filter configuration
@@ -274,7 +368,27 @@ def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig) -> bool:
     if filter_config.exclude_topads and ad_item.is_top_ad:
         return True
 
-    searchable_text = f"{ad_item.title} {ad_item.description}"
+    if filter_config.require_location_patterns and not any(
+        _text_matches(ad_item.location, pattern) for pattern in filter_config.require_location_patterns
+    ):
+        _logger.info("Ad '%s' '%s' with location '%s' is excluded", ad_item.id, ad_item.title, ad_item.location)
+        return True
+
+    return False
+
+
+def ad_item_is_excluded(ad_item: AdItem, filter_config: FilterConfig, full_description: str | None = None) -> bool:
+    """Return whether an AdItem should be excluded from the results, based on the filter configuration
+
+    :param ad_item: AdItem to check
+    :param filter_config: Filter configuration
+    :param full_description: Full description of the ad, used instead of the shortened one if given
+    :return: Whether to exclude this item
+    """
+    if ad_item_is_excluded_by_metadata(ad_item, filter_config):
+        return True
+
+    searchable_text = f"{ad_item.title} {full_description or ad_item.description}"
 
     for pattern in filter_config.exclude_patterns:
         if _text_matches(searchable_text, pattern):
